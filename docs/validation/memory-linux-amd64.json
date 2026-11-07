@@ -1,0 +1,73 @@
+{
+  "results": [
+    {
+      "passed": true,
+      "limitMiB": 64,
+      "combinedCurrentMiB": 45.2,
+      "combinedPeakMiB": 49.45,
+      "oomKills": 0,
+      "requests": 72,
+      "bursts": [
+        {
+          "connections": 8,
+          "bytes": 67108864,
+          "seconds": 0.146,
+          "MiBPerSecond": 439.27,
+          "combinedPeakMiB": 45.62
+        },
+        {
+          "connections": 32,
+          "bytes": 268435456,
+          "seconds": 0.505,
+          "MiBPerSecond": 506.95,
+          "combinedPeakMiB": 49.45
+        }
+      ],
+      "rawBytesBeforeReset": 336568373,
+      "swap": false,
+      "sampledMemory": {
+        "peakBytes": 51847168,
+        "anonPeakBytes": 10956800,
+        "socketPeakBytes": 1622016,
+        "summedRssPeakBytes": 44212224,
+        "summedPssPeakBytes": 44195840,
+        "oomKills": 0
+      }
+    },
+    {
+      "passed": true,
+      "limitMiB": 128,
+      "combinedCurrentMiB": 44.97,
+      "combinedPeakMiB": 49.49,
+      "oomKills": 0,
+      "requests": 72,
+      "bursts": [
+        {
+          "connections": 8,
+          "bytes": 67108864,
+          "seconds": 0.137,
+          "MiBPerSecond": 468.49,
+          "combinedPeakMiB": 45.95
+        },
+        {
+          "connections": 32,
+          "bytes": 268435456,
+          "seconds": 0.52,
+          "MiBPerSecond": 492.23,
+          "combinedPeakMiB": 49.49
+        }
+      ],
+      "rawBytesBeforeReset": 336568373,
+      "swap": false,
+      "sampledMemory": {
+        "peakBytes": 51896320,
+        "anonPeakBytes": 10862592,
+        "socketPeakBytes": 1540096,
+        "summedRssPeakBytes": 44240896,
+        "summedPssPeakBytes": 44224512,
+        "oomKills": 0
+      }
+    }
+  ],
+  "scope": "64/128 MiB cgroup of agent+Xray, one VLESS TCP client, plain transport; host OS excluded; not a full 64 MiB VPS guarantee"
+}

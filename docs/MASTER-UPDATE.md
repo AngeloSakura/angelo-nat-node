@@ -20,7 +20,14 @@
 
 ## 执行
 
-先将已审查的完整项目放到主面板机器。不要用上游安装脚本代替此升级脚本。明确选择一个稳定 release tag：
+在主面板机器下载本项目发布的独立升级器，明确选择**主面板仓库**的稳定 release tag：
+
+```bash
+curl -fL --retry 3 https://github.com/AngeloSakura/angelo-nat-node/releases/download/v0.1.0/update-master.sh -o /tmp/angelo-master-update.sh
+sudo bash /tmp/angelo-master-update.sh --version v1.0.0
+```
+
+若已下载完整源码，也可从仓库运行。不要用上游首次安装脚本代替此升级脚本：
 
 ```bash
 sudo bash scripts/update-master.sh --version v1.0.0
@@ -123,3 +130,5 @@ bash scripts/test-update-master.sh
 测试用真实临时 SQLite 数据、归档和文件操作；用 fixture ELF 和模拟 systemd/curl 替代真实服务及网络，不执行测试 ELF。14 例覆盖成功升级、重复升级、启动失败回滚、页面不健康回滚、迁移后失败保持停机、摘要错误/缺失、发布 checksum 回退、PostgreSQL 拒绝、恶意归档成员、非法 tag、保存环境与运行环境不一致、已加载工作目录漂移、已加载启动程序漂移。每例检查用户/入站/流量/API Token/key/config/Xray 的保留以及输出中无测试秘密。
 
 测试可以在 Linux 或 Git Bash + Python 运行。它证明脚本控制流及文件保留，不替代真实 Linux systemd、真实发布二进制、生产规模数据库迁移和业务流量的验收；发布前需由独立审查和集成环境完成这些检查。
+
+本项目另已通过真实Linux systemd + 固定SHA v1.0.0发布二进制的同版本升级演练，验证登录、API Token、用户/入站、非零流量、倍率和Xray文件保留。见 [完整记录](VALIDATION.md)。跨版本数据库迁移、加密Token模式及用户生产数据库不在该演练覆盖范围内。

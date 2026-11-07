@@ -1,6 +1,6 @@
 # 发布验证记录
 
-本文件记录实际验证范围。尚未写明 PASS 的项目不得视为已通过；CI 原始记录和发布资产 SHA256 是交付依据。
+本文件记录实际验证范围；CI 原始记录和发布资产 SHA256 是交付依据。发布前列出的三组 Linux 检查均已通过。
 
 ## 测试对象
 
@@ -37,7 +37,33 @@
 
 ## Linux 发布门槛
 
-最终 Linux CI 结果、内存数据和构建资产将在发布前填入本节。更新脚本的 mock 测试验证真实文件/SQLite/归档保留与错误路径，模拟 systemd/网络；不等同于对用户生产数据库执行升级。
+[发布前完整 CI 42381437890](https://github.com/AngeloSakura/angelo-nat-node/actions/runs/42381437890)，代码提交 `fd1e007312d600ff1d3e1c39aa36c58db1fff3a3`：**verify / master-node-live / master-live 全部 PASS**。后续文档提交未改变程序、测试或打包脚本。
+
+| 检查 | 实际结果 |
+| --- | --- |
+| Go vet、race、官方 Xray 真实流量联调 | PASS，原始输出见 [go-tests-linux.txt](validation/go-tests-linux.txt) |
+| 安装保护、主面板14场景、节点升级10场景 | PASS，mock systemd/网络，真实文件和SQLite |
+| 真实主面板独立同版本升级 | PASS，真实 systemd/SQLite；账号登录、API Token、入站/客户端、非零计数、倍率、key文件和Xray校验和保留 |
+| 真实主面板控制节点与倍率 | PASS，主面板创建/删除客户端、计费、实际全局推送、停用/恢复 |
+| amd64/arm64/386/armv7 | 全部静态交叉编译和打包成功；运行验证为amd64 |
+| 官方依赖可达漏洞扫描 | PASS，govulncheck v1.9.0 未发现漏洞 |
+
+真实2.5倍计费样例：节点原始 up=59、down=32883；主面板 billed up=148、down=82208，符合逐方向取整。将额度置于原始与已计费值之间（57649字节），节点确实拒绝代理且 Xray 仍健康；提高额度可恢复；等待35秒未发生重复乘倍率反馈。
+
+### 冷启动与突发内存
+
+Ubuntu24.04 amd64、Go1.27.3、原版 Xray26.10.31；独立可执行文件inode并驱逐缓存后启动。一个VLESS TCP用户，8路/32路各传8MiB，加顺序请求、重启、额度/重置校验。每组72次成功请求、无swap，测试客户端/目标HTTP服务在cgroup外。
+
+| cgroup限制 | 全程合计峰值 | 测试末合计 | 32路传输峰值 | OOM kill |
+| --- | ---: | ---: | ---: | ---: |
+| 64 MiB | 49.45 MiB | 45.20 MiB | 49.45 MiB | 0 |
+| 128 MiB | 49.49 MiB | 44.97 MiB | 49.49 MiB | 0 |
+
+完整数据：[memory-linux-amd64.json](validation/memory-linux-amd64.json)。进程RSS求和采样峰值约42.2MiB。cgroup还包含文件页、socket等记账，因此使用较高的cgroup值描述开销。
+
+**以上不包含VPS操作系统，也没有证明TLS/REALITY、UDP、长时慢客户端或64个活跃用户都能在64MiB整机运行。** 本地回环吞吐仅用来制造突发，不代表公网性能。128MiB更适合实际部署；64MiB需要极精简系统和少量连接。SO_SNDBUF/SO_RCVBUF缩小会影响高时延单连接吞吐。
+
+更新脚本的 mock 测试验证真实文件/SQLite/归档保留与错误路径，模拟 systemd/网络；生产机器从未被这些测试修改。
 
 2026-11-07 的中间验证记录：
 

@@ -1,0 +1,57 @@
+?   	github.com/AngeloSakura/angelo-nat-node/cmd/angelo-node	[no test files]
+=== RUN   TestBearerControlsInboundAndSurvivesRestart
+--- PASS: TestBearerControlsInboundAndSurvivesRestart (0.02s)
+=== RUN   TestSocketBoundsPreserveExplicitConfig
+--- PASS: TestSocketBoundsPreserveExplicitConfig (0.00s)
+=== RUN   TestNetworkSpecificSocketOptionsKeepGeneralTCPBounds
+=== RUN   TestNetworkSpecificSocketOptionsKeepGeneralTCPBounds/udp
+=== RUN   TestNetworkSpecificSocketOptionsKeepGeneralTCPBounds/tcp4
+=== RUN   TestNetworkSpecificSocketOptionsKeepGeneralTCPBounds/tcp6
+--- PASS: TestNetworkSpecificSocketOptionsKeepGeneralTCPBounds (0.00s)
+    --- PASS: TestNetworkSpecificSocketOptionsKeepGeneralTCPBounds/udp (0.00s)
+    --- PASS: TestNetworkSpecificSocketOptionsKeepGeneralTCPBounds/tcp4 (0.00s)
+    --- PASS: TestNetworkSpecificSocketOptionsKeepGeneralTCPBounds/tcp6 (0.00s)
+=== RUN   TestReviewSavedClientLimitMustNotMakeStateUnopenable
+--- PASS: TestReviewSavedClientLimitMustNotMakeStateUnopenable (0.02s)
+=== RUN   TestReviewSharedRenameAcceptsPerInboundMasterSequence
+--- PASS: TestReviewSharedRenameAcceptsPerInboundMasterSequence (0.04s)
+=== RUN   TestReviewLargeBilledCountersCannotBypassQuota
+--- PASS: TestReviewLargeBilledCountersCannotBypassQuota (0.02s)
+=== RUN   TestOverlayReviewMalformedClientsCannotEraseRunningUsers
+--- PASS: TestOverlayReviewMalformedClientsCannotEraseRunningUsers (0.01s)
+=== RUN   TestOfficialXrayTrafficQuotaAndRestart
+--- PASS: TestOfficialXrayTrafficQuotaAndRestart (0.62s)
+=== RUN   TestLifecycleReadsRemainResponsiveDuringApply
+=== RUN   TestLifecycleReadsRemainResponsiveDuringApply/commit
+=== RUN   TestLifecycleReadsRemainResponsiveDuringApply/rollback
+--- PASS: TestLifecycleReadsRemainResponsiveDuringApply (0.03s)
+    --- PASS: TestLifecycleReadsRemainResponsiveDuringApply/commit (0.01s)
+    --- PASS: TestLifecycleReadsRemainResponsiveDuringApply/rollback (0.01s)
+=== RUN   TestLifecycleFailedApplyInvalidatesTrafficBaseline
+=== RUN   TestLifecycleFailedApplyInvalidatesTrafficBaseline/restart
+=== RUN   TestLifecycleFailedApplyInvalidatesTrafficBaseline/update
+=== RUN   TestLifecycleFailedApplyInvalidatesTrafficBaseline/reconcile
+--- PASS: TestLifecycleFailedApplyInvalidatesTrafficBaseline (0.05s)
+    --- PASS: TestLifecycleFailedApplyInvalidatesTrafficBaseline/restart (0.02s)
+    --- PASS: TestLifecycleFailedApplyInvalidatesTrafficBaseline/update (0.02s)
+    --- PASS: TestLifecycleFailedApplyInvalidatesTrafficBaseline/reconcile (0.01s)
+=== RUN   TestLifecycleReconcileSuppliesApplyDeadline
+--- PASS: TestLifecycleReconcileSuppliesApplyDeadline (0.01s)
+=== RUN   TestCheckNeverInitializesOrChangesState
+--- PASS: TestCheckNeverInitializesOrChangesState (0.00s)
+=== RUN   TestHealthRejectsCoreExitDespiteCachedRunningStatus
+--- PASS: TestHealthRejectsCoreExitDespiteCachedRunningStatus (0.00s)
+=== RUN   TestProtocolDetachLastAttachmentRetainsTrafficOnReattach
+--- PASS: TestProtocolDetachLastAttachmentRetainsTrafficOnReattach (0.02s)
+=== RUN   TestProtocolPartialGlobalPushPreservesOmittedClients
+--- PASS: TestProtocolPartialGlobalPushPreservesOmittedClients (0.03s)
+=== RUN   TestProtocolDelayedExpiryActivatesOnceForSharedClient
+--- PASS: TestProtocolDelayedExpiryActivatesOnceForSharedClient (0.04s)
+=== RUN   TestProtocolQuotaDisablePersistsUntilExplicitReset
+--- PASS: TestProtocolQuotaDisablePersistsUntilExplicitReset (0.03s)
+=== RUN   TestProtocolSharedRenameMovesIdentityAndCountersOnce
+--- PASS: TestProtocolSharedRenameMovesIdentityAndCountersOnce (0.04s)
+=== RUN   TestProtocolDisableFlowSuppressesRuntimeVision
+--- PASS: TestProtocolDisableFlowSuppressesRuntimeVision (0.01s)
+PASS
+ok  	github.com/AngeloSakura/angelo-nat-node/internal/node	2.014s
