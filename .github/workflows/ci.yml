@@ -4,7 +4,23 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
+  master-live:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Real isolated master independent-update preservation
+        shell: bash
+        run: sudo bash scripts/test-master-live.sh | tee /tmp/master-live.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: master-live-validation
+          path: /tmp/master-live.txt
   verify:
     runs-on: ubuntu-24.04
     defaults:
