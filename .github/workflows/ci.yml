@@ -21,6 +21,24 @@ jobs:
         with:
           name: master-live-validation
           path: /tmp/master-live.txt
+  master-node-live:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.3'
+      - name: Build and connect unchanged master to lightweight node
+        shell: bash
+        run: |
+          CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /tmp/angelo-node ./cmd/angelo-node
+          sudo bash scripts/test-master-node-live.sh /tmp/angelo-node | tee /tmp/master-node-live.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: master-node-live-validation
+          path: /tmp/master-node-live.txt
   verify:
     runs-on: ubuntu-24.04
     defaults:

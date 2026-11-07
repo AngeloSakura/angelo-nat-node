@@ -112,9 +112,10 @@ elif mode == 'init':
            'XUI_LOG_FOLDER': str(root / 'log'), 'XUI_NODE_TOKEN_KEY_FILE': str(root / 'db/node_token_key.json'),
            'NODE_TOKEN_ENCRYPTION': 'off'}
     with (root / 'initialize.log').open('wb') as log:
-        subprocess.run([str(root / 'install/x-ui'), 'setting', '-port', str(s['port']),
+        initialized = subprocess.run([str(root / 'install/x-ui'), 'setting', '-port', str(s['port']),
             '-listenIP', '127.0.0.1', '-webBasePath', s['base'], '-username', s['username'], '-password', s['password']],
-            cwd=root / 'install', env=env, stdout=log, stderr=log, check=True, timeout=45)
+            cwd=root / 'install', env=env, stdout=log, stderr=log, check=False, timeout=45)
+        require(initialized.returncode == 0, 'Master CLI initialization failed; private fixture log contains details')
     with connect() as db:
         require(db.execute('PRAGMA quick_check').fetchone()[0] == 'ok', 'SQLite initialization failed')
         template = {'log': {'access': 'none', 'error': 'none', 'loglevel': 'warning'},
