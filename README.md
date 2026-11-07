@@ -8,6 +8,7 @@
 
 - 默认管理进程 `GOMEMLIMIT=12MiB`，Xray `24MiB`，两者 `GOGC=50`、`GOMAXPROCS=1`。这是 Go 堆软目标，**不是总 RSS 硬上限**。
 - Xray 每连接缓冲配置为 4 KiB；关闭逐连接 access 日志。API 限制 8 个连接、4 个并发请求、每请求 1 MiB；默认最多 16 入站、64 个已保存用户（含暂时解绑用户）。
+- Linux TCP 入站/直连出站默认通过原版 Xray `customSockopt` 将发送/接收 socket 缓冲各设为 32 KiB（Linux 内部通常按两倍记账），避免自动调大消耗内存；已有显式选项在对应网络上优先。配置 `socketBufferKB` 可调整，0=32、-1=关闭。这会限制高延迟链路的单连接吞吐，实际使用应在内存和速度间取舍；不修改系统全局 sysctl，也不硬性限速。
 - 突发高带宽不等于必然按传输字节数累积内存，但更多并发连接、TLS/REALITY 握手、UDP、内核 socket 缓冲都会增加占用。无法在不限制实际业务的情况下保证任意流量都适合 64 MiB。
 - 发布验证在 Linux 将**管理进程和原版 Xray 一起**放入 64/128 MiB、无 swap cgroup，实际传输并记录峰值。测试包含 8/32 路同时传输；原始数据和范围见 [验证记录](docs/VALIDATION.md)。
 - 该 cgroup 不包含 VPS 操作系统和其他服务，不能等同于完整 64 MiB VPS 保证。优先选择 128 MiB；64 MiB 只建议少量连接、简单配置并观察系统剩余内存。
@@ -95,8 +96,11 @@ go vet ./...
 XRAY_BINARY=/path/to/original/xray go test -race -count=1 ./...
 bash scripts/test-update-master.sh
 sudo bash scripts/test-update-node.sh
+bash scripts/test-install.sh
 bash scripts/package.sh
 sudo python3 scripts/memory-test.py dist/angelo-node-linux-amd64 /path/to/original/xray
+sudo bash scripts/test-master-live.sh
+sudo bash scripts/test-master-node-live.sh "$PWD/dist/angelo-node-linux-amd64"
 ```
 
 编译在有足够内存的开发机/CI 上完成。GitHub Actions 同时校验协议、原版 Xray、更新保留、跨架构打包与内存约束；测试管线启用 pipefail，失败不能被 tee 掩盖。详见 [协议说明](docs/PROTOCOL.md)、[需求](SPEC.md)、[验证记录](docs/VALIDATION.md)。

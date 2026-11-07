@@ -38,3 +38,12 @@
 ## Linux 发布门槛
 
 最终 Linux CI 结果、内存数据和构建资产将在发布前填入本节。更新脚本的 mock 测试验证真实文件/SQLite/归档保留与错误路径，模拟 systemd/网络；不等同于对用户生产数据库执行升级。
+
+2026-11-07 的中间验证记录：
+
+- `2f7fa0d`：Go vet、race 与官方 Xray 联调、主面板 14 场景/节点升级 10 场景均通过；未限制 TCP socket 时，64 MiB 突发测试触发 OOM。此提交未发布。
+- `ce2630c`：[CI 42380048478](https://github.com/AngeloSakura/angelo-nat-node/actions/runs/42380048478) 全通过，包括安装保护和 8/32 路各传 8 MiB 的突发；已加入 socket 上限。早期 cgroup 峰值可能未包含此前测试加载并由其他组记账的共享可执行页，故该轮的 12.87/12.66 MiB **不用于最终内存承诺**。
+- 后续测量为每次运行复制独立可执行文件 inode，fsync 后执行 POSIX_FADV_DONTNEED，再在 cgroup 内冷启动，额外报告所有组内进程 RSS/PSS、匿名页及 socket 缓冲峰值。RSS 求和会重复统计共享页，PSS 按比例计算，两者均是采样值；cgroup memory.peak 为内核记录。
+- 本地 `govulncheck`（v1.9.0）扫描当前依赖与可达代码：No vulnerabilities found；这不是对未来漏洞或全部逻辑正确性的保证。
+
+真实 master smoke 使用固定 SHA 的上游 v1.0.0 二进制及其原版 Xray、临时 SQLite 和真实 systemd。同版本更新测试不代表跨版本数据库迁移或生产数据全覆盖。互操作测试由主控实际创建节点和客户端、计算 2.5 倍、下发全局流量并停用节点；不使用伪造全局推送代替主控。
