@@ -47,20 +47,29 @@ threading.Thread(target=upstream.serve_forever, daemon=True).start()
 
 def probe(memory):
     directory = pathlib.Path(tempfile.mkdtemp(prefix='angelo-mem-'))
+    # Unique executable inodes + cache eviction prevent earlier CI integration
+    # tests charging shared Xray code pages to a different cgroup.
+    test_agent, test_xray = directory/'angelo-node', directory/'xray'
+    shutil.copy2(agent,test_agent)
+    shutil.copy2(xray,test_xray)
     state = directory / 'state'
     config_path = directory / 'config.json'
     api_port, inbound_port, stats_port = port(), port(), port()
-    subprocess.run([agent, '-init', '-config', str(config_path), '-state-dir', str(state), '-xray', xray, '-listen', f'127.0.0.1:{api_port}'], check=True, stdout=subprocess.DEVNULL)
+    subprocess.run([str(test_agent), '-init', '-config', str(config_path), '-state-dir', str(state), '-xray', str(test_xray), '-listen', f'127.0.0.1:{api_port}'], check=True, stdout=subprocess.DEVNULL)
     cfg = json.loads(config_path.read_text())
     cfg['apiAddress'] = f'127.0.0.1:{stats_port}'
     cfg['pollSeconds'] = 2
     cfg['directOutboundSettings'] = {'finalRules':[{'action':'allow','ip':['127.0.0.1'],'port':upstream.server_port}]}
     config_path.write_text(json.dumps(cfg))
     unit = f'angelo-test-{memory}-{os.getpid()}'
-    subprocess.run(['systemd-run', '--quiet', '--unit', unit, '--property', f'MemoryMax={memory}M', '--property', 'MemorySwapMax=0', '--property', 'KillMode=mixed', '--setenv', 'GOMEMLIMIT=12MiB', '--setenv', 'GOGC=50', '--setenv', 'GOMAXPROCS=1', agent, '-config', str(config_path)], check=True)
+    for executable in (test_agent,test_xray):
+        with executable.open('rb') as handle:
+            os.fsync(handle.fileno())
+            os.posix_fadvise(handle.fileno(),0,0,os.POSIX_FADV_DONTNEED)
+    subprocess.run(['systemd-run', '--quiet', '--unit', unit, '--property', f'MemoryMax={memory}M', '--property', 'MemorySwapMax=0', '--property', 'KillMode=mixed', '--setenv', 'GOMEMLIMIT=12MiB', '--setenv', 'GOGC=50', '--setenv', 'GOMAXPROCS=1', str(test_agent), '-config', str(config_path)], check=True)
     cgroup=subprocess.check_output(['systemctl','show',unit,'--property','ControlGroup','--value'],text=True).strip()
     group=pathlib.Path('/sys/fs/cgroup'+cgroup)
-    samples={'peakBytes':0,'anonPeakBytes':0,'socketPeakBytes':0,'oomKills':0}
+    samples={'peakBytes':0,'anonPeakBytes':0,'socketPeakBytes':0,'summedRssPeakBytes':0,'summedPssPeakBytes':0,'oomKills':0}
     stop_sample=threading.Event()
     def sample():
         while not stop_sample.is_set():
@@ -71,6 +80,16 @@ def probe(memory):
                 samples['anonPeakBytes']=max(samples['anonPeakBytes'],int(stats['anon']))
                 samples['socketPeakBytes']=max(samples['socketPeakBytes'],int(stats['sock']))
                 samples['oomKills']=max(samples['oomKills'],int(events['oom_kill']))
+                rss=pss=0
+                for pid in (group/'cgroup.procs').read_text().split():
+                    try:
+                        for line in pathlib.Path('/proc',pid,'smaps_rollup').read_text().splitlines():
+                            parts=line.split()
+                            if parts[0]=='Rss:': rss+=int(parts[1])*1024
+                            elif parts[0]=='Pss:': pss+=int(parts[1])*1024
+                    except OSError: pass
+                samples['summedRssPeakBytes']=max(samples['summedRssPeakBytes'],rss)
+                samples['summedPssPeakBytes']=max(samples['summedPssPeakBytes'],pss)
             except (OSError,KeyError): pass
             stop_sample.wait(.02)
     sampler=threading.Thread(target=sample,daemon=True)
@@ -119,7 +138,7 @@ def probe(memory):
         for i in range(30): fetch()
         cgroup=subprocess.check_output(['systemctl','show',unit,'--property','ControlGroup','--value'],text=True).strip()
         group=pathlib.Path('/sys/fs/cgroup'+cgroup)
-        print(f'{memory} MiB baseline forwarding passed; starting bursts',file=sys.stderr,flush=True)
+        print(f'{memory} MiB cold-executable baseline passed; starting bursts',file=sys.stderr,flush=True)
         for concurrency in (8,32):
             started=time.monotonic()
             with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as pool:
