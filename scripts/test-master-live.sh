@@ -185,8 +185,8 @@ elif mode in ('api-seed', 'api-check'):
         require(len(matches) == 1 and matches[0].get('up') == 112233 and matches[0].get('down') == 445566, 'Client traffic changed')
     deadline = time.monotonic() + 45
     while True:
-        status = request('panel/api/server/status')
-        if status.get('xray',{}).get('state') == 'running': break
+        status = request('panel/api/server/status') or {}
+        if (status.get('xray') or {}).get('state') == 'running': break
         require(time.monotonic() < deadline, 'Real bundled Xray did not reach running state')
         time.sleep(1)
     require(status.get('panelGuid') == s['guid'], 'Master identity changed')
