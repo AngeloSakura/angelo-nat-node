@@ -44,7 +44,7 @@ sudo env XRAY_BINARY=/usr/local/x-ui/bin/xray-linux-amd64 \
 
 ## 独立升级，不重置数据
 
-节点升级只替换管理程序，备份原程序、配置目录和整个状态目录，保留 Token、证书、GUID、用户、计数以及原版 Xray：
+节点升级只替换管理程序，备份原程序、指定的 config.json 和整个状态目录，保留 Token、证书、GUID、用户、计数以及原版 Xray。证书文件及其他外部配置需另行备份：
 
 ```bash
 sudo angelo-node-update v0.1.0

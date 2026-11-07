@@ -28,6 +28,7 @@ type Config struct {
 	MaxInbounds     int    `json:"maxInbounds"`
 	XrayMemoryLimit string `json:"xrayMemoryLimit"`
 	DirectSettings  Object `json:"directOutboundSettings,omitempty"`
+	SocketBufferKB  int    `json:"socketBufferKB"`
 }
 type Runtime interface {
 	Apply(context.Context, []byte) error
@@ -81,6 +82,9 @@ func open(cfg Config, core Runtime, create bool) (*Node, error) {
 	}
 	if cfg.MaxClients < 1 || cfg.MaxInbounds < 1 {
 		return nil, fmt.Errorf("capacity limits must be positive")
+	}
+	if cfg.SocketBufferKB < -1 || cfg.SocketBufferKB > 1024 {
+		return nil, fmt.Errorf("socketBufferKB must be -1 (disabled), 0 (32 default), or 1..1024")
 	}
 	if create {
 		if err := os.MkdirAll(cfg.StateDir, 0700); err != nil {

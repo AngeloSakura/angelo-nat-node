@@ -214,9 +214,7 @@ func (n *Node) render(s State) ([]byte, error) {
 			listen = "0.0.0.0"
 		}
 		inbound := Object{"tag": ib.Tag, "listen": listen, "port": ib.Port, "protocol": ib.Protocol, "settings": settings}
-		if len(ib.StreamSettings) > 0 {
-			inbound["streamSettings"] = ib.StreamSettings
-		}
+		inbound["streamSettings"] = n.boundedSockets(ib.StreamSettings)
 		if len(ib.Sniffing) > 0 {
 			inbound["sniffing"] = ib.Sniffing
 		}
@@ -226,7 +224,7 @@ func (n *Node) render(s State) ([]byte, error) {
 		"log": Object{"loglevel": "warning", "access": "none"}, "stats": Object{},
 		"api":      Object{"tag": "angelo-api", "listen": api, "services": []string{"StatsService"}},
 		"policy":   Object{"levels": Object{"0": Object{"statsUserUplink": true, "statsUserDownlink": true, "bufferSize": 4}}, "system": Object{"statsInboundUplink": true, "statsInboundDownlink": true}},
-		"inbounds": inbounds, "outbounds": []Object{{"tag": "direct", "protocol": "freedom", "settings": n.cfg.DirectSettings}},
+		"inbounds": inbounds, "outbounds": []Object{{"tag": "direct", "protocol": "freedom", "settings": n.cfg.DirectSettings, "streamSettings": n.boundedSockets(nil)}},
 	})
 }
 func (n *Node) reconcile(ctx context.Context) error {

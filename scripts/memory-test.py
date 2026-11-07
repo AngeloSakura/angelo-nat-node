@@ -32,8 +32,11 @@ class Content(http.server.BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header('Content-Length', str(size))
         self.end_headers()
-        for offset in range(0, size, len(data)):
-            self.wfile.write(data[:min(len(data),size-offset)])
+        try:
+            for offset in range(0, size, len(data)):
+                self.wfile.write(data[:min(len(data),size-offset)])
+        except (BrokenPipeError, ConnectionResetError):
+            pass  # caller reports the failed proxy request; avoid duplicate tracebacks
     def log_message(self, *args):
         pass
 
@@ -55,6 +58,24 @@ def probe(memory):
     config_path.write_text(json.dumps(cfg))
     unit = f'angelo-test-{memory}-{os.getpid()}'
     subprocess.run(['systemd-run', '--quiet', '--unit', unit, '--property', f'MemoryMax={memory}M', '--property', 'MemorySwapMax=0', '--property', 'KillMode=mixed', '--setenv', 'GOMEMLIMIT=12MiB', '--setenv', 'GOGC=50', '--setenv', 'GOMAXPROCS=1', agent, '-config', str(config_path)], check=True)
+    cgroup=subprocess.check_output(['systemctl','show',unit,'--property','ControlGroup','--value'],text=True).strip()
+    group=pathlib.Path('/sys/fs/cgroup'+cgroup)
+    samples={'peakBytes':0,'anonPeakBytes':0,'socketPeakBytes':0,'oomKills':0}
+    stop_sample=threading.Event()
+    def sample():
+        while not stop_sample.is_set():
+            try:
+                stats=dict(line.split() for line in (group/'memory.stat').read_text().splitlines())
+                events=dict(line.split() for line in (group/'memory.events').read_text().splitlines())
+                samples['peakBytes']=max(samples['peakBytes'],int((group/'memory.peak').read_text()))
+                samples['anonPeakBytes']=max(samples['anonPeakBytes'],int(stats['anon']))
+                samples['socketPeakBytes']=max(samples['socketPeakBytes'],int(stats['sock']))
+                samples['oomKills']=max(samples['oomKills'],int(events['oom_kill']))
+            except (OSError,KeyError): pass
+            stop_sample.wait(.02)
+    sampler=threading.Thread(target=sample,daemon=True)
+    sampler.start()
+    bursts=[]
     def request(path, data=None):
         body = None if data is None else json.dumps(data).encode()
         req = urllib.request.Request(f'https://127.0.0.1:{api_port}/panel/api/{path}', data=body, headers={'Authorization':'Bearer '+cfg['token'], 'Content-Type':'application/json'})
@@ -98,13 +119,14 @@ def probe(memory):
         for i in range(30): fetch()
         cgroup=subprocess.check_output(['systemctl','show',unit,'--property','ControlGroup','--value'],text=True).strip()
         group=pathlib.Path('/sys/fs/cgroup'+cgroup)
-        bursts=[]
+        print(f'{memory} MiB baseline forwarding passed; starting bursts',file=sys.stderr,flush=True)
         for concurrency in (8,32):
             started=time.monotonic()
             with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as pool:
                 list(pool.map(lambda _:fetch(True),range(concurrency)))
             elapsed=time.monotonic()-started
             bursts.append({'connections':concurrency,'bytes':concurrency*8*1024*1024,'seconds':round(elapsed,3),'MiBPerSecond':round(concurrency*8/elapsed,2),'combinedPeakMiB':round(int((group/'memory.peak').read_text())/1048576,2)})
+            print(json.dumps(bursts[-1]),file=sys.stderr,flush=True)
         time.sleep(2.5)
         before=request('inbounds/list')[0]['clientStats'][0]['down']
         if before<30*32768: raise RuntimeError(f'raw accounting missing: {before}')
@@ -127,9 +149,13 @@ def probe(memory):
         peak=int((group/'memory.peak').read_text())
         events=dict(line.split() for line in (group/'memory.events').read_text().splitlines())
         if int(events.get('oom_kill','0')): raise RuntimeError('OOM killed a process')
-        result={'limitMiB':memory,'combinedCurrentMiB':round(current/1048576,2),'combinedPeakMiB':round(peak/1048576,2),'oomKills':int(events['oom_kill']),'requests':72,'bursts':bursts,'rawBytesBeforeReset':raw,'swap':False}
+        result={'passed':True,'limitMiB':memory,'combinedCurrentMiB':round(current/1048576,2),'combinedPeakMiB':round(peak/1048576,2),'oomKills':int(events['oom_kill']),'requests':72,'bursts':bursts,'rawBytesBeforeReset':raw,'swap':False,'sampledMemory':samples}
         return result
+    except Exception as error:
+        return {'passed':False,'limitMiB':memory,'error':str(error),'bursts':bursts,'sampledMemory':samples}
     finally:
+        stop_sample.set()
+        sampler.join()
         subprocess.run(['systemctl','stop',unit],check=False,stdout=subprocess.DEVNULL)
         subprocess.run(['journalctl','-u',unit,'--no-pager','-n','12'],check=False,stdout=sys.stderr)
         shutil.rmtree(directory)
@@ -137,3 +163,4 @@ def probe(memory):
 results=[probe(64),probe(128)]
 upstream.shutdown()
 print(json.dumps({'results':results,'scope':'64/128 MiB cgroup of agent+Xray, one VLESS TCP client, plain transport; host OS excluded; not a full 64 MiB VPS guarantee'},indent=2))
+sys.exit(0 if all(result['passed'] for result in results) else 1)

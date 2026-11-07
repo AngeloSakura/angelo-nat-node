@@ -33,6 +33,7 @@ jobs:
           for f in scripts/*.sh; do bash -n "$f"; done
           if [ -f scripts/test-update-master.sh ]; then bash scripts/test-update-master.sh; fi
           if [ -f scripts/test-update-node.sh ]; then sudo bash scripts/test-update-node.sh; fi
+          bash scripts/test-install.sh
       - name: Build binaries off the NAT VPS
         run: bash scripts/package.sh
       - name: Test 64 and 128 MiB process cgroups
