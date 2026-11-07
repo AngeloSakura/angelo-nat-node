@@ -16,7 +16,7 @@ func TestSocketBoundsPreserveExplicitConfig(t *testing.T) {
 	}
 	sockopt := actual["sockopt"].(Object)
 	options := sockopt["customSockopt"].([]Object)
-	if len(options) != 2 || str(options[0], "value") != "65536" || str(options[1], "opt") != "8" || str(options[1], "value") != "32768" {
+	if len(options) != 3 || str(options[2], "value") != "65536" || str(options[1], "opt") != "8" || str(options[1], "value") != "32768" {
 		t.Fatalf("unexpected socket options: %+v", options)
 	}
 	if actual["security"] != "reality" || sockopt["tcpFastOpen"] != true {
@@ -26,5 +26,18 @@ func TestSocketBoundsPreserveExplicitConfig(t *testing.T) {
 	disabled, _ := json.Marshal(n.boundedSockets(original))
 	if string(disabled) != string(before) {
 		t.Fatal("disable flag changed configuration")
+	}
+}
+
+func TestNetworkSpecificSocketOptionsKeepGeneralTCPBounds(t *testing.T) {
+	for _, network := range []string{"udp", "tcp4", "tcp6"} {
+		t.Run(network, func(t *testing.T) {
+			n := &Node{}
+			stream := n.boundedSockets(Object{"sockopt": Object{"customSockopt": []Object{{"system": "linux", "network": network, "level": "1", "opt": "8", "value": "65536", "type": "int"}}}})
+			options := stream["sockopt"].(Object)["customSockopt"].([]Object)
+			if len(options) != 3 || str(options[0], "network") != "tcp" || str(options[1], "network") != "tcp" || str(options[2], "network") != network {
+				t.Fatalf("network bounds missing: %+v", options)
+			}
+		})
 	}
 }

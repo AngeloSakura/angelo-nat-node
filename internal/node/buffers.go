@@ -31,18 +31,13 @@ func (n *Node) boundedSockets(original Object) Object {
 	raw, _ = json.Marshal(sockopt["customSockopt"])
 	var options []Object
 	_ = json.Unmarshal(raw, &options)
+	defaults := []Object{}
 	for _, opt := range []string{"7", "8"} {
-		exists := false
-		for _, option := range options {
-			if str(option, "level") == "1" && str(option, "opt") == opt && (str(option, "system") == "" || str(option, "system") == "linux") {
-				exists = true
-			}
-		}
-		if !exists {
-			options = append(options, Object{"system": "linux", "network": "tcp", "level": "1", "opt": opt, "value": strconv.Itoa(kb * 1024), "type": "int"})
-		}
+		defaults = append(defaults, Object{"system": "linux", "network": "tcp", "level": "1", "opt": opt, "value": strconv.Itoa(kb * 1024), "type": "int"})
 	}
-	sockopt["customSockopt"] = options
+	// Xray applies these in order. Explicit settings override only the
+	// networks they actually target; udp/tcp4 cannot uncap other networks.
+	sockopt["customSockopt"] = append(defaults, options...)
 	stream["sockopt"] = sockopt
 	return stream
 }
