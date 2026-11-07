@@ -202,7 +202,7 @@ elif mode in ('snapshot','compare'):
         saved['nodes'] = [dict(r) for r in db.execute('SELECT id,name,address,port,api_token,enable,traffic_multiplier FROM nodes ORDER BY id')]
         saved['settings'] = [dict(r) for r in db.execute('SELECT key,value FROM settings WHERE key IN (?,?,?,?,?,?,?,?) ORDER BY key',
             ('webPort','webListen','webBasePath','panelGuid','secret','xrayTemplateConfig','subEnable','twoFactorEnable'))]
-        for table in ('client_records','client_inbounds'):
+        for table in ('clients','client_inbounds'):
             if columns(db,table): saved[table] = [dict(r) for r in db.execute('SELECT * FROM ' + table + ' ORDER BY rowid')]
     for relative in ('install/x-ui','install/bin/xray-linux-amd64','db/node_token_key.json'):
         saved[relative] = digest(root / relative)
@@ -245,7 +245,7 @@ ProtectSystem=strict
 ProtectHome=yes
 ReadWritePaths=$root
 InaccessiblePaths=-/etc/x-ui -/usr/local/x-ui -/var/log/x-ui
-PrivateTmp=yes
+PrivateTmp=no
 IPAddressDeny=any
 IPAddressAllow=localhost
 StandardOutput=append:$root/service.log
