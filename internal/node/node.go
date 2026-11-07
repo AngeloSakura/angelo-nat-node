@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -26,6 +27,7 @@ type Config struct {
 	MaxClients      int    `json:"maxClients"`
 	MaxInbounds     int    `json:"maxInbounds"`
 	XrayMemoryLimit string `json:"xrayMemoryLimit"`
+	DirectSettings  Object `json:"directOutboundSettings,omitempty"`
 }
 type Runtime interface {
 	Apply(context.Context, []byte) error
@@ -44,9 +46,24 @@ type Node struct {
 	lastErr  string
 	started  time.Time
 	views    atomic.Value
+	requests chan struct{}
+	closed   bool
 }
 
 func Open(cfg Config, core Runtime) (*Node, error) {
+	return open(cfg, core, true)
+}
+
+// Check validates existing state without initializing, saving, or starting Xray.
+func Check(cfg Config) error {
+	n, err := open(cfg, nil, false)
+	if err != nil {
+		return err
+	}
+	_, err = n.render(n.state)
+	return err
+}
+func open(cfg Config, core Runtime, create bool) (*Node, error) {
 	if len(cfg.Token) < 32 {
 		return nil, fmt.Errorf("token must contain at least 32 characters")
 	}
@@ -59,12 +76,20 @@ func Open(cfg Config, core Runtime) (*Node, error) {
 	if cfg.BasePath == "" {
 		cfg.BasePath = "/"
 	}
-	if err := os.MkdirAll(cfg.StateDir, 0700); err != nil {
-		return nil, err
+	if !filepath.IsAbs(cfg.StateDir) || strings.ContainsAny(cfg.StateDir, "\r\n\x00") {
+		return nil, fmt.Errorf("stateDir must be an absolute single-line path")
 	}
-	n := &Node{cfg: cfg, core: core, previous: map[string]int64{}, started: time.Now()}
+	if cfg.MaxClients < 1 || cfg.MaxInbounds < 1 {
+		return nil, fmt.Errorf("capacity limits must be positive")
+	}
+	if create {
+		if err := os.MkdirAll(cfg.StateDir, 0700); err != nil {
+			return nil, err
+		}
+	}
+	n := &Node{cfg: cfg, core: core, previous: map[string]int64{}, started: time.Now(), requests: make(chan struct{}, 4)}
 	b, err := os.ReadFile(filepath.Join(cfg.StateDir, "state.json"))
-	if os.IsNotExist(err) {
+	if os.IsNotExist(err) && create {
 		id := make([]byte, 16)
 		if _, err = rand.Read(id); err != nil {
 			return nil, err
@@ -115,6 +140,10 @@ func (n *Node) Start(ctx context.Context) error {
 func (n *Node) Close() error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	if n.closed {
+		return nil
+	}
+	n.closed = true
 	_ = n.collect()
 	err := n.save()
 	if n.core != nil {
@@ -137,6 +166,10 @@ func (n *Node) Run(ctx context.Context) {
 			return
 		case <-timer.C:
 			n.mu.Lock()
+			if n.closed || ctx.Err() != nil {
+				n.mu.Unlock()
+				return
+			}
 			if n.core != nil && !n.core.Running() {
 				n.previous = map[string]int64{}
 				data, _ := n.render(n.state)

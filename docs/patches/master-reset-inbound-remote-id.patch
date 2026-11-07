@@ -1,0 +1,14 @@
+diff --git a/internal/web/runtime/remote.go b/internal/web/runtime/remote.go
+--- a/internal/web/runtime/remote.go
++++ b/internal/web/runtime/remote.go
+@@ -697,5 +697,9 @@
+ func (r *Remote) ResetInboundTraffic(ctx context.Context, ib *model.Inbound) error {
+-	_, err := r.do(ctx, http.MethodPost, fmt.Sprintf("panel/api/inbounds/%d/resetTraffic", ib.Id), nil)
++	id, err := r.resolveRemoteID(ctx, ib.Tag)
++	if err != nil {
++		return err
++	}
++	_, err = r.do(ctx, http.MethodPost, fmt.Sprintf("panel/api/inbounds/%d/resetTraffic", id), nil)
+ 	return err
+ }
+ 

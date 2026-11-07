@@ -55,16 +55,32 @@ func mutateClients(s *State, path string, query url.Values, raw []byte) error {
 		}
 		found := false
 		newEmail := str(p, "email")
+		lookupEmail := email
+		if newEmail != email {
+			if s.Traffic[email] != nil && s.Traffic[newEmail] != nil {
+				return fmt.Errorf("new email already exists")
+			}
+			// The master sends one old-email update per attachment. The first
+			// moves the shared identity; later calls update that named target.
+			if s.Traffic[email] == nil && s.Traffic[newEmail] != nil {
+				lookupEmail = newEmail
+			}
+		}
 		for i := range s.Inbounds {
 			ib := &s.Inbounds[i]
-			if newEmail == email && len(ids) > 0 && !ids[ib.ID] {
+			selected := len(ids) == 0 || ids[ib.ID]
+			if lookupEmail == newEmail && !selected {
 				continue
 			}
 			clients := ib.clients()
 			for j, c := range clients {
-				if str(c, "email") == email {
-					clients[j] = p
-					found = true
+				if str(c, "email") == lookupEmail {
+					if selected {
+						clients[j] = p
+						found = true
+					} else {
+						c["email"] = newEmail
+					}
 				}
 			}
 			ib.setClients(clients)
@@ -72,10 +88,7 @@ func mutateClients(s *State, path string, query url.Values, raw []byte) error {
 		if !found {
 			return fmt.Errorf("client not found")
 		}
-		if newEmail != email {
-			if s.Traffic[newEmail] != nil {
-				return fmt.Errorf("new email already exists")
-			}
+		if newEmail != email && lookupEmail == email {
 			if t := s.Traffic[email]; t != nil {
 				copy := *t
 				copy.Email = newEmail

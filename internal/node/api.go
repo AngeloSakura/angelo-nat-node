@@ -51,6 +51,13 @@ func (n *Node) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unsupported encoding", http.StatusUnsupportedMediaType)
 		return
 	}
+	select {
+	case n.requests <- struct{}{}:
+		defer func() { <-n.requests }()
+	default:
+		http.Error(w, "too many concurrent requests", http.StatusServiceUnavailable)
+		return
+	}
 	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBody))
 	if err != nil {
 		http.Error(w, "body too large", http.StatusRequestEntityTooLarge)
@@ -89,6 +96,19 @@ func (n *Node) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 func (n *Node) get(path string) (any, error) {
 	switch path {
+	case "server/health":
+		if n.core == nil || !n.core.Running() {
+			return nil, fmt.Errorf("Xray is not running")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		if _, err := n.core.Stats(ctx); err != nil {
+			return nil, fmt.Errorf("Xray stats not responding: %w", err)
+		}
+		if n.lastErr != "" {
+			return nil, fmt.Errorf("node reconciliation: %s", n.lastErr)
+		}
+		return Object{"xray": Object{"state": "running"}}, nil
 	case "server/status":
 		state := "stopped"
 		version := ""

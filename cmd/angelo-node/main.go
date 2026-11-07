@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/hex"
@@ -26,6 +27,7 @@ import (
 	"time"
 
 	"github.com/AngeloSakura/angelo-nat-node/internal/node"
+	"golang.org/x/net/netutil"
 )
 
 func main() {
@@ -38,6 +40,8 @@ func run() error {
 	initialize := flag.Bool("init", false, "create config, token and TLS certificate; never overwrite existing files")
 	show := flag.Bool("show", false, "show connection parameters (includes secret token)")
 	check := flag.Bool("check", false, "validate config and saved state without starting Xray")
+	statePath := flag.Bool("state-dir-path", false, "print configured absolute persistent state directory")
+	health := flag.Bool("health-check", false, "check authenticated local API and running Xray")
 	version := flag.Bool("version", false, "print version")
 	listen := flag.String("listen", ":2053", "initial API listen address")
 	xray := flag.String("xray", "/usr/local/lib/angelo-node/xray", "initial original Xray path")
@@ -69,10 +73,20 @@ func run() error {
 	}
 	if *show {
 		fmt.Printf("Listen: %s\nBase path: %s\nAPI token: %s\nTLS certificate: %s\n", cfg.Listen, cfg.BasePath, cfg.Token, cfg.TLSCert)
+		return showFingerprint(cfg.TLSCert)
+	}
+	if *statePath {
+		if !filepath.IsAbs(cfg.StateDir) || strings.ContainsAny(cfg.StateDir, "\r\n\x00") {
+			return fmt.Errorf("invalid absolute stateDir")
+		}
+		fmt.Println(cfg.StateDir)
 		return nil
 	}
+	if *health {
+		return healthCheck(cfg)
+	}
 	if *check {
-		_, err = node.Open(cfg, nil)
+		err = node.Check(cfg)
 		if err == nil {
 			fmt.Println("Configuration and state OK")
 		}
@@ -106,13 +120,21 @@ func run() error {
 	}
 	defer app.Close()
 	server := &http.Server{Addr: cfg.Listen, Handler: app, ReadHeaderTimeout: 3 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 10 * time.Second, IdleTimeout: 15 * time.Second, MaxHeaderBytes: 8192}
+	// Bound TLS sessions and prevent HTTP/2 multiplexing from bypassing it.
+	server.TLSNextProto = map[string]func(*http.Server, *tls.Conn, http.Handler){}
+	listener, err := net.Listen("tcp", cfg.Listen)
+	if err != nil {
+		return err
+	}
+	listener = netutil.LimitListener(listener, 8)
+	defer listener.Close()
 	go app.Run(ctx)
 	result := make(chan error, 1)
 	go func() {
 		if cfg.TLSCert != "" && cfg.TLSKey != "" {
-			result <- server.ListenAndServeTLS(cfg.TLSCert, cfg.TLSKey)
+			result <- server.ServeTLS(listener, cfg.TLSCert, cfg.TLSKey)
 		} else {
-			result <- server.ListenAndServe()
+			result <- server.Serve(listener)
 		}
 	}()
 	log.Printf("angelo-node %s listening on %s; Xray %s", node.Version, cfg.Listen, core.Version())

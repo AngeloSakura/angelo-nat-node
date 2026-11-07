@@ -212,6 +212,13 @@ func validateState(s *State, maxInbounds, maxClients int) error {
 		if ib.Settings == nil {
 			return fmt.Errorf("settings must be an object")
 		}
+		if raw, present := ib.Settings["clients"]; present {
+			b, err := json.Marshal(raw)
+			var parsed []Object
+			if err != nil || len(b) == 0 || b[0] != '[' || json.Unmarshal(b, &parsed) != nil {
+				return fmt.Errorf("settings.clients must be an array of client objects")
+			}
+		}
 		clients := ib.clients()
 		emails := map[string]bool{}
 		for _, c := range clients {
@@ -234,6 +241,9 @@ func validateState(s *State, maxInbounds, maxClients int) error {
 			users[email] = true
 			if num(c, "totalGB") < 0 {
 				return fmt.Errorf("totalGB must be nonnegative bytes")
+			}
+			if num(c, "expiryTime") < -3155760000000 {
+				return fmt.Errorf("delayed expiry cannot exceed 100 years")
 			}
 			if num(c, "limitIp") > 0 {
 				return fmt.Errorf("IP limits are not implemented; set limitIp=0")

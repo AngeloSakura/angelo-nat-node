@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net"
 	"strconv"
 	"strings"
@@ -50,9 +51,9 @@ func (n *Node) collect() error {
 				continue
 			}
 			if up {
-				t.Up += delta
+				t.Up = addUsage(t.Up, delta)
 			} else {
-				t.Down += delta
+				t.Down = addUsage(t.Down, delta)
 			}
 			t.LastOnline = now
 			if t.ExpiryTime < 0 {
@@ -73,9 +74,9 @@ func (n *Node) collect() error {
 				ib := &n.state.Inbounds[i]
 				if ib.Tag == parts[1] {
 					if up {
-						ib.Up += delta
+						ib.Up = addUsage(ib.Up, delta)
 					} else {
-						ib.Down += delta
+						ib.Down = addUsage(ib.Down, delta)
 					}
 				}
 			}
@@ -104,7 +105,7 @@ func enforce(s *State) {
 	now := time.Now().UnixMilli()
 	for i := range s.Inbounds {
 		ib := &s.Inbounds[i]
-		if ib.Enable && ((ib.ExpiryTime > 0 && ib.ExpiryTime <= now) || (ib.Total > 0 && ib.Up+ib.Down >= ib.Total)) {
+		if ib.Enable && ((ib.ExpiryTime > 0 && ib.ExpiryTime <= now) || quotaReached(ib.Up, ib.Down, ib.Total)) {
 			ib.Enable = false
 		}
 		clients := ib.clients()
@@ -130,11 +131,11 @@ func clientAllowed(s State, c Object, now int64) bool {
 		return true
 	}
 	email := str(c, "email")
-	if t := s.Traffic[email]; t != nil && t.Up+t.Down >= limit {
+	if t := s.Traffic[email]; t != nil && quotaReached(t.Up, t.Down, limit) {
 		return false
 	}
 	for _, rows := range s.Global {
-		if g, ok := rows[email]; ok && g.ReceivedAt > now-86400000 && g.Up+g.Down >= limit {
+		if g, ok := rows[email]; ok && g.ReceivedAt > now-86400000 && quotaReached(g.Up, g.Down, limit) {
 			return false
 		}
 	}
@@ -163,7 +164,7 @@ func (n *Node) render(s State) ([]byte, error) {
 	inbounds := []Object{}
 	now := time.Now().UnixMilli()
 	for _, ib := range s.Inbounds {
-		if !ib.Enable || (ib.ExpiryTime > 0 && ib.ExpiryTime <= now) || (ib.Total > 0 && ib.Up+ib.Down >= ib.Total) {
+		if !ib.Enable || (ib.ExpiryTime > 0 && ib.ExpiryTime <= now) || quotaReached(ib.Up, ib.Down, ib.Total) {
 			continue
 		}
 		settings := Object{}
@@ -222,10 +223,10 @@ func (n *Node) render(s State) ([]byte, error) {
 		inbounds = append(inbounds, inbound)
 	}
 	return json.Marshal(Object{
-		"log": Object{"loglevel": "warning"}, "stats": Object{},
+		"log": Object{"loglevel": "warning", "access": "none"}, "stats": Object{},
 		"api":      Object{"tag": "angelo-api", "listen": api, "services": []string{"StatsService"}},
 		"policy":   Object{"levels": Object{"0": Object{"statsUserUplink": true, "statsUserDownlink": true, "bufferSize": 4}}, "system": Object{"statsInboundUplink": true, "statsInboundDownlink": true}},
-		"inbounds": inbounds, "outbounds": []Object{{"tag": "direct", "protocol": "freedom"}},
+		"inbounds": inbounds, "outbounds": []Object{{"tag": "direct", "protocol": "freedom", "settings": n.cfg.DirectSettings}},
 	})
 }
 func (n *Node) reconcile(ctx context.Context) error {
@@ -248,10 +249,10 @@ func (n *Node) reconcile(ctx context.Context) error {
 	return nil
 }
 func (n *Node) commit(ctx context.Context, next State) error {
+	ensureTraffic(&next)
 	if err := validateState(&next, n.cfg.MaxInbounds, n.cfg.MaxClients); err != nil {
 		return err
 	}
-	ensureTraffic(&next)
 	enforce(&next)
 	data, err := n.render(next)
 	if err != nil {
@@ -291,4 +292,14 @@ func (n *Node) inboundView(ib Inbound) Inbound {
 		}
 	}
 	return ib
+}
+
+func quotaReached(up, down, limit int64) bool {
+	return limit > 0 && (up >= limit || down >= limit-up)
+}
+func addUsage(value, delta int64) int64 {
+	if delta > math.MaxInt64-value {
+		return math.MaxInt64
+	}
+	return value + delta
 }

@@ -56,7 +56,11 @@ func TestOfficialXrayTrafficQuotaAndRestart(t *testing.T) {
 		t.Skip("set XRAY_BINARY to an unchanged official Xray executable")
 	}
 	port := freePort(t)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, strings.Repeat("x", 32768)) }))
+	defer upstream.Close()
 	cfg := Config{Token: strings.Repeat("s", 48), StateDir: t.TempDir(), BasePath: "/", XrayPath: binary, APIAddress: fmt.Sprintf("127.0.0.1:%d", freePort(t)), PollSeconds: 2}
+	// Xray 26.10 defaults to blocking private destinations. Allow only this fixture.
+	cfg.DirectSettings = Object{"finalRules": []Object{{"action": "allow", "ip": []string{"127.0.0.1"}, "port": upstream.Listener.Addr().(*net.TCPAddr).Port}}}
 	core, err := NewProcess(cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -71,11 +75,9 @@ func TestOfficialXrayTrafficQuotaAndRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer app.Close()
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, strings.Repeat("x", 32768)) }))
-	defer upstream.Close()
 	apiRequest(t, app, "inbounds/add", testInbound(port))
 	if err = fetchVLESS(port, upstream.Listener.Addr().(*net.TCPAddr).Port); err != nil {
-		t.Fatal(err)
+		t.Fatalf("%v; Xray log: %s; configuration: %s", err, core.log.String(), core.config)
 	}
 	time.Sleep(100 * time.Millisecond)
 	apiRequest(t, app, "inbounds/pushClientTraffics", Object{"masterGuid": "master", "traffics": []Object{{"email": "alice", "up": 10000000, "down": 0}}})

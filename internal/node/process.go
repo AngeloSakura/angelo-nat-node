@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -126,7 +125,7 @@ func (p *Process) launch(ctx context.Context, data []byte) error {
 	p.cmd = exec.Command(p.cfg.XrayPath, "run", "-config", configPath)
 	configureChild(p.cmd)
 	p.cmd.Env = p.environment()
-	p.cmd.Stdout = io.Discard
+	p.cmd.Stdout = p.log
 	p.cmd.Stderr = p.log
 	if err = p.cmd.Start(); err != nil {
 		p.cmd = nil
