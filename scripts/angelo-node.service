@@ -1,0 +1,25 @@
+[Unit]
+Description=Angelo lightweight NAT node
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/angelo-node -config /etc/angelo-node/config.json
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=15
+KillMode=control-group
+UMask=0077
+Environment=GOMEMLIMIT=12MiB
+Environment=GOGC=50
+Environment=GOMAXPROCS=1
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/angelo-node
+LimitNOFILE=8192
+
+[Install]
+WantedBy=multi-user.target

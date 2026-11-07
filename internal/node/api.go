@@ -64,8 +64,21 @@ func (n *Node) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	route := strings.TrimPrefix(r.URL.Path, prefix)
-	n.mu.Lock()
+	if cached, ok := n.views.Load().(map[string][]byte); ok {
+		if b, found := cached[r.Method+" "+route]; found {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Cache-Control", "no-store")
+			_, _ = w.Write(b)
+			return
+		}
+	}
+	if !n.mu.TryLock() {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		reply(w, nil, fmt.Errorf("configuration update in progress; retry"))
+		return
+	}
 	defer n.mu.Unlock()
+	defer n.refreshViews()
 	if r.Method == "GET" {
 		obj, err := n.get(route)
 		reply(w, obj, err)
@@ -237,7 +250,10 @@ func (n *Node) post(r *http.Request, path string, raw []byte) (any, error) {
 		if _, ok := next.Global[payload.MasterGUID]; !ok && len(next.Global) >= 4 {
 			return nil, fmt.Errorf("maximum four masters")
 		}
-		rows := map[string]GlobalUsage{}
+		rows := next.Global[payload.MasterGUID]
+		if rows == nil {
+			rows = map[string]GlobalUsage{}
+		}
 		for _, t := range payload.Traffics {
 			if t.Up < 0 || t.Down < 0 {
 				return nil, fmt.Errorf("negative usage")
@@ -251,6 +267,7 @@ func (n *Node) post(r *http.Request, path string, raw []byte) (any, error) {
 		for i := range next.Inbounds {
 			next.Inbounds[i].Up = 0
 			next.Inbounds[i].Down = 0
+			markReset(&next.Inbounds[i], now)
 		}
 	case strings.HasPrefix(path, "inbounds/") && (strings.HasSuffix(path, "/resetTraffic") || strings.HasSuffix(path, "/subSortIndex")):
 		parts := strings.Split(path, "/")
@@ -265,6 +282,7 @@ func (n *Node) post(r *http.Request, path string, raw []byte) (any, error) {
 			if parts[2] == "resetTraffic" {
 				ib.Up = 0
 				ib.Down = 0
+				markReset(ib, now)
 			} else {
 				values, e := url.ParseQuery(string(raw))
 				if e != nil {
@@ -292,7 +310,7 @@ func (n *Node) post(r *http.Request, path string, raw []byte) (any, error) {
 		if n.core == nil {
 			return nil, fmt.Errorf("Xray runtime unavailable")
 		}
-		if err := n.core.Apply(ctx, n.active); err != nil {
+		if err := n.replace(ctx, n.active); err != nil {
 			return nil, err
 		}
 		n.previous = map[string]int64{}

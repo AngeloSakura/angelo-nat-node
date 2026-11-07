@@ -55,6 +55,19 @@ func (n *Node) collect() error {
 				t.Down += delta
 			}
 			t.LastOnline = now
+			if t.ExpiryTime < 0 {
+				expiry := now - t.ExpiryTime
+				t.ExpiryTime = expiry
+				for i := range n.state.Inbounds {
+					clients := n.state.Inbounds[i].clients()
+					for _, c := range clients {
+						if str(c, "email") == t.Email {
+							c["expiryTime"] = expiry
+						}
+					}
+					n.state.Inbounds[i].setClients(clients)
+				}
+			}
 		case "inbound":
 			for i := range n.state.Inbounds {
 				ib := &n.state.Inbounds[i]
@@ -71,11 +84,9 @@ func (n *Node) collect() error {
 	return nil
 }
 func ensureTraffic(s *State) {
-	keep := map[string]bool{}
 	for _, ib := range s.Inbounds {
 		for _, c := range ib.clients() {
 			email := str(c, "email")
-			keep[email] = true
 			t := s.Traffic[email]
 			if t == nil {
 				t = &Traffic{Email: email}
@@ -88,14 +99,23 @@ func ensureTraffic(s *State) {
 			t.ID = ib.ID
 		}
 	}
-	for email := range s.Traffic {
-		if !keep[email] {
-			delete(s.Traffic, email)
-			for _, rows := range s.Global {
-				delete(rows, email)
+}
+func enforce(s *State) {
+	now := time.Now().UnixMilli()
+	for i := range s.Inbounds {
+		ib := &s.Inbounds[i]
+		if ib.Enable && ((ib.ExpiryTime > 0 && ib.ExpiryTime <= now) || (ib.Total > 0 && ib.Up+ib.Down >= ib.Total)) {
+			ib.Enable = false
+		}
+		clients := ib.clients()
+		for _, c := range clients {
+			if !clientAllowed(*s, c, now) {
+				c["enable"] = false
 			}
 		}
+		ib.setClients(clients)
 	}
+	ensureTraffic(s)
 }
 func clientAllowed(s State, c Object, now int64) bool {
 	if !enabled(c) {
@@ -133,11 +153,14 @@ func (n *Node) render(s State) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	if port < 1 || port > 65535 {
+		return nil, fmt.Errorf("invalid API port")
+	}
 	ip := net.ParseIP(host)
 	if ip == nil || !ip.IsLoopback() {
 		return nil, fmt.Errorf("Xray API must listen on a loopback IP")
 	}
-	inbounds := []Object{{"tag": "angelo-api", "listen": host, "port": port, "protocol": "dokodemo-door", "settings": Object{"address": host}}}
+	inbounds := []Object{}
 	now := time.Now().UnixMilli()
 	for _, ib := range s.Inbounds {
 		if !ib.Enable || (ib.ExpiryTime > 0 && ib.ExpiryTime <= now) || (ib.Total > 0 && ib.Up+ib.Down >= ib.Total) {
@@ -160,6 +183,7 @@ func (n *Node) render(s State) ([]byte, error) {
 					}
 				}
 			case "vmess":
+				// VMess has no panel-side security setting in server clients.
 				out["id"] = c["id"]
 				if v, ok := c["alterId"]; ok {
 					out["alterId"] = v
@@ -175,6 +199,9 @@ func (n *Node) render(s State) ([]byte, error) {
 				}
 			}
 			clients = append(clients, out)
+			if ib.Protocol == "vless" && string(ib.Extra["disableFlow"]) == "true" {
+				delete(out, "flow")
+			}
 		}
 		if len(clients) == 0 {
 			continue
@@ -196,14 +223,14 @@ func (n *Node) render(s State) ([]byte, error) {
 	}
 	return json.Marshal(Object{
 		"log": Object{"loglevel": "warning"}, "stats": Object{},
-		"api":      Object{"tag": "angelo-api", "services": []string{"StatsService"}},
+		"api":      Object{"tag": "angelo-api", "listen": api, "services": []string{"StatsService"}},
 		"policy":   Object{"levels": Object{"0": Object{"statsUserUplink": true, "statsUserDownlink": true, "bufferSize": 4}}, "system": Object{"statsInboundUplink": true, "statsInboundDownlink": true}},
 		"inbounds": inbounds, "outbounds": []Object{{"tag": "direct", "protocol": "freedom"}},
-		"routing": Object{"rules": []Object{{"type": "field", "inboundTag": []string{"angelo-api"}, "outboundTag": "angelo-api"}}},
 	})
 }
 func (n *Node) reconcile(ctx context.Context) error {
 	ensureTraffic(&n.state)
+	enforce(&n.state)
 	data, err := n.render(n.state)
 	if err != nil {
 		return err
@@ -212,7 +239,7 @@ func (n *Node) reconcile(ctx context.Context) error {
 		return nil
 	}
 	if n.core != nil {
-		if err = n.core.Apply(ctx, data); err != nil {
+		if err = n.replace(ctx, data); err != nil {
 			return err
 		}
 		n.previous = map[string]int64{}
@@ -225,6 +252,7 @@ func (n *Node) commit(ctx context.Context, next State) error {
 		return err
 	}
 	ensureTraffic(&next)
+	enforce(&next)
 	data, err := n.render(next)
 	if err != nil {
 		return err
@@ -233,7 +261,7 @@ func (n *Node) commit(ctx context.Context, next State) error {
 	oldConfig := n.active
 	changed := !bytes.Equal(data, oldConfig)
 	if changed && n.core != nil {
-		if err = n.core.Apply(ctx, data); err != nil {
+		if err = n.replace(ctx, data); err != nil {
 			n.previous = map[string]int64{}
 			return err
 		}
@@ -243,7 +271,7 @@ func (n *Node) commit(ctx context.Context, next State) error {
 	if err = n.save(); err != nil {
 		n.state = old
 		if changed && n.core != nil {
-			if rollback := n.core.Apply(context.Background(), oldConfig); rollback != nil {
+			if rollback := n.replace(context.Background(), oldConfig); rollback != nil {
 				n.lastErr = fmt.Sprintf("save failed: %v; rollback failed: %v", err, rollback)
 			}
 		}

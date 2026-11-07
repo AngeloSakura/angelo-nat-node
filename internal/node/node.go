@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -42,6 +43,7 @@ type Node struct {
 	active   []byte
 	lastErr  string
 	started  time.Time
+	views    atomic.Value
 }
 
 func Open(cfg Config, core Runtime) (*Node, error) {
@@ -81,18 +83,29 @@ func Open(cfg Config, core Runtime) (*Node, error) {
 	if err = validateState(&n.state, cfg.MaxInbounds, cfg.MaxClients); err != nil {
 		return nil, err
 	}
+	n.refreshViews()
 	return n, nil
 }
 func (n *Node) save() error { return atomicJSON(filepath.Join(n.cfg.StateDir, "state.json"), n.state) }
+func (n *Node) replace(ctx context.Context, data []byte) error {
+	if n.core == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, 6*time.Second)
+	defer cancel()
+	defer func() { n.previous = map[string]int64{} }()
+	return n.core.Apply(ctx, data)
+}
 func (n *Node) Start(ctx context.Context) error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	defer n.refreshViews()
 	data, err := n.render(n.state)
 	if err != nil {
 		return err
 	}
 	if n.core != nil {
-		if err = n.core.Apply(ctx, data); err != nil {
+		if err = n.replace(ctx, data); err != nil {
 			return err
 		}
 	}
@@ -127,7 +140,7 @@ func (n *Node) Run(ctx context.Context) {
 			if n.core != nil && !n.core.Running() {
 				n.previous = map[string]int64{}
 				data, _ := n.render(n.state)
-				if err := n.core.Apply(ctx, data); err != nil {
+				if err := n.replace(ctx, data); err != nil {
 					n.lastErr = err.Error()
 				} else {
 					n.lastErr = ""
@@ -145,6 +158,7 @@ func (n *Node) Run(ctx context.Context) {
 			if err := n.save(); err != nil {
 				n.lastErr = err.Error()
 			}
+			n.refreshViews()
 			n.mu.Unlock()
 		}
 	}

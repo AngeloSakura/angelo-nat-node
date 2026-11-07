@@ -54,9 +54,10 @@ func mutateClients(s *State, path string, query url.Values, raw []byte) error {
 			}
 		}
 		found := false
+		newEmail := str(p, "email")
 		for i := range s.Inbounds {
 			ib := &s.Inbounds[i]
-			if len(ids) > 0 && !ids[ib.ID] {
+			if newEmail == email && len(ids) > 0 && !ids[ib.ID] {
 				continue
 			}
 			clients := ib.clients()
@@ -71,7 +72,6 @@ func mutateClients(s *State, path string, query url.Values, raw []byte) error {
 		if !found {
 			return fmt.Errorf("client not found")
 		}
-		newEmail := str(p, "email")
 		if newEmail != email {
 			if s.Traffic[newEmail] != nil {
 				return fmt.Errorf("new email already exists")
@@ -80,15 +80,23 @@ func mutateClients(s *State, path string, query url.Values, raw []byte) error {
 				copy := *t
 				copy.Email = newEmail
 				s.Traffic[newEmail] = &copy
+				delete(s.Traffic, email)
 			}
 			for _, rows := range s.Global {
 				if g, ok := rows[email]; ok {
 					rows[newEmail] = g
+					delete(rows, email)
 				}
 			}
 		}
 	case strings.HasPrefix(path, "clients/del/") || strings.HasSuffix(path, "/detach"):
 		email := strings.TrimPrefix(path, "clients/del/")
+		if strings.HasPrefix(path, "clients/del/") {
+			delete(s.Traffic, email)
+			for _, rows := range s.Global {
+				delete(rows, email)
+			}
+		}
 		ids := map[int]bool{}
 		if strings.HasSuffix(path, "/detach") {
 			email = strings.TrimSuffix(strings.TrimPrefix(path, "clients/"), "/detach")

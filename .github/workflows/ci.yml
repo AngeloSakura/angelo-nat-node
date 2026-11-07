@@ -1,0 +1,45 @@
+name: Validate and package
+on:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.3'
+      - name: Fetch unchanged official Xray
+        run: |
+          mkdir -p /tmp/angelo-xray
+          curl -fL --retry 3 https://github.com/XTLS/Xray-core/releases/download/v26.10.31/Xray-linux-64.zip -o /tmp/angelo-xray/xray.zip
+          echo 'e4bd9119f50ae7c41658b1abd0679ae06f98bd864a2907ff33f2f2cf7081b214  /tmp/angelo-xray/xray.zip' | sha256sum -c -
+          unzip -q /tmp/angelo-xray/xray.zip -d /tmp/angelo-xray
+          chmod +x /tmp/angelo-xray/xray
+      - name: Vet and race-tested official Xray integration
+        env:
+          XRAY_BINARY: /tmp/angelo-xray/xray
+        run: |
+          go vet ./...
+          go test -race -count=1 -v ./... | tee /tmp/go-tests.txt
+      - name: Shell syntax and master update preservation
+        run: |
+          for f in scripts/*.sh; do bash -n "$f"; done
+          if [ -f scripts/test-update-master.sh ]; then bash scripts/test-update-master.sh; fi
+          if [ -f scripts/test-update-node.sh ]; then sudo bash scripts/test-update-node.sh; fi
+      - name: Build binaries off the NAT VPS
+        run: bash scripts/package.sh
+      - name: Test 64 and 128 MiB process cgroups
+        run: sudo python3 scripts/memory-test.py dist/angelo-node-linux-amd64 /tmp/angelo-xray/xray | tee /tmp/memory-results.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: validation-and-packages
+          path: |
+            dist/
+            /tmp/go-tests.txt
+            /tmp/memory-results.json
+          retention-days: 14

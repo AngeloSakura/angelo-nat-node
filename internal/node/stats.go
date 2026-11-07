@@ -39,7 +39,8 @@ func (c *statsClient) query(ctx context.Context) (map[string]int64, error) {
 	}
 	defer response.Body.Close()
 	if response.StatusCode != 200 {
-		return nil, fmt.Errorf("stats HTTP %d", response.StatusCode)
+		body, _ := io.ReadAll(io.LimitReader(response.Body, 512))
+		return nil, fmt.Errorf("stats HTTP %d: %s", response.StatusCode, body)
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, maxBody+1))
 	if err != nil {

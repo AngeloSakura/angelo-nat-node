@@ -86,6 +86,8 @@ func (p *Process) Stop() error {
 	return nil
 }
 func (p *Process) Apply(ctx context.Context, data []byte) error {
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
 	old := bytes.Clone(p.config)
 	_ = p.Stop()
 	if err := p.launch(ctx, data); err != nil {
@@ -110,6 +112,7 @@ func (p *Process) launch(ctx context.Context, data []byte) error {
 	// Only one Xray process exists at a time, including configuration validation.
 	checkCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	check := exec.CommandContext(checkCtx, p.cfg.XrayPath, "run", "-test", "-config", configPath)
+	configureChild(check)
 	output := &boundedLog{}
 	check.Stdout = output
 	check.Stderr = output
@@ -121,6 +124,7 @@ func (p *Process) launch(ctx context.Context, data []byte) error {
 	}
 	p.log = &boundedLog{}
 	p.cmd = exec.Command(p.cfg.XrayPath, "run", "-config", configPath)
+	configureChild(p.cmd)
 	p.cmd.Env = p.environment()
 	p.cmd.Stdout = io.Discard
 	p.cmd.Stderr = p.log
@@ -143,7 +147,7 @@ func (p *Process) launch(ctx context.Context, data []byte) error {
 		}
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("Xray API not ready: %w", ctx.Err())
+			return fmt.Errorf("Xray API not ready: %w; last query: %v; log: %s", ctx.Err(), err, p.log.String())
 		case <-time.After(30 * time.Millisecond):
 		}
 	}

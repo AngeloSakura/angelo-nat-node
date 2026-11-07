@@ -177,12 +177,23 @@ func atomicWrite(path string, b []byte, mode os.FileMode) error {
 	return nil
 }
 func validateState(s *State, maxInbounds, maxClients int) error {
+	if len(s.Traffic) > maxClients {
+		return fmt.Errorf("maximum %d saved clients, including detached clients; delete unused clients explicitly", maxClients)
+	}
 	if len(s.Inbounds) > maxInbounds {
 		return fmt.Errorf("maximum %d inbounds", maxInbounds)
 	}
 	tags := map[string]bool{}
 	users := map[string]bool{}
 	for _, ib := range s.Inbounds {
+		if ib.Total < 0 {
+			return fmt.Errorf("inbound total must be nonnegative bytes")
+		}
+		var reset string
+		_ = json.Unmarshal(ib.Extra["trafficReset"], &reset)
+		if reset != "" && reset != "never" {
+			return fmt.Errorf("automatic inbound traffic resets are unsupported; use never")
+		}
 		if ib.Port < 1 || ib.Port > 65535 {
 			return fmt.Errorf("port must be 1..65535")
 		}
@@ -204,6 +215,14 @@ func validateState(s *State, maxInbounds, maxClients int) error {
 		clients := ib.clients()
 		emails := map[string]bool{}
 		for _, c := range clients {
+			for _, key := range []string{"reset", "resetDay", "resetWeekday", "resetMax"} {
+				if num(c, key) > 0 {
+					return fmt.Errorf("automatic renewal %s is unsupported on this node", key)
+				}
+			}
+			if reset := str(c, "trafficReset"); reset != "" && reset != "never" {
+				return fmt.Errorf("automatic client traffic resets are unsupported")
+			}
 			email := str(c, "email")
 			if email == "" || len(email) > 256 || strings.Contains(email, ">>>") {
 				return fmt.Errorf("each client requires a valid email")
