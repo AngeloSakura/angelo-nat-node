@@ -1,0 +1,42 @@
+# Protocol regression review
+
+> 历史记录（2026-11-07），本次仅归档，未重新执行审查或测试。初始失败、后续修复和当时未验证的边界按原记录保留；发布时结果见[发布验证](../../VALIDATION.md)，实机结论见[全部报告](../README.md)。文中 work/ 路径为原本地工作目录，不是公开可用的部署路径。
+
+Test-only change: `outputs/angelo-nat-node/internal/node/protocol_regression_test.go`.
+
+Tests exercise the authenticated HTTP handler, JSON response contract, saved state, and captured Xray configuration through a fake Runtime. The fake resets process-local counters on Apply, so cumulative usage must survive simulated Xray restarts. No production implementation was edited.
+
+Command run from the module: `go test ./internal/node -run '^TestProtocol' -count=1 -v`. Test file formatted with `gofmt`.
+
+Initial result: all six regressions reproduced against the implementation available at the time of execution.
+
+| Test | Initial observed failure |
+| --- | --- |
+| TestProtocolDetachLastAttachmentRetainsTrafficOnReattach | Last detach removed the cumulative traffic record. |
+| TestProtocolPartialGlobalPushPreservesOmittedClients | Partial/empty pushes removed omitted master overlay rows and the lowered authoritative row. |
+| TestProtocolDelayedExpiryActivatesOnceForSharedClient | First traffic left expiryTime at -60000 instead of activating an absolute deadline shared by attachments. |
+| TestProtocolQuotaDisablePersistsUntilExplicitReset | Restart followed by a lower global push re-enabled the quota-disabled client. |
+| TestProtocolSharedRenameMovesIdentityAndCountersOnce | Scoped rename left the second attachment using the old identity. |
+| TestProtocolDisableFlowSuppressesRuntimeVision | Runtime configuration retained xtls-rprx-vision despite disableFlow=true. |
+
+These are deterministic unit/protocol tests, not substitutes for actual official-Xray traffic integration or Linux combined-memory validation.
+
+## Re-review after d02d530
+
+All six original protocol regressions now pass. Inspection confirms detached counters are preserved, partial overlays are upserted, first-use expiry is copied to every attachment, quota-disable state is saved, shared identity is moved once, and disableFlow is applied when rendering.
+
+Additional concrete regressions were reproduced in an isolated Go overlay, so production Go sources were not edited during this pass. The implementation owner then incorporated the first three into permanent compatibility tests and fixed them:
+
+- Saved-user capacity could be exceeded after a detach because validation ran before new traffic records were added; this made the saved state fail to reopen. Latest reproduction passes.
+- A master sends one rename RPC per attachment; global rename originally made the second old-email request fail and replaced unrelated attachment flow fields. Latest sequential-RPC reproduction passes and attachment-specific flow remains intact.
+- Two valid per-direction master counters at 9e18 overflowed their sum and bypassed a quota. Latest boundary reproduction passes after overflow-safe accounting changes.
+
+The last reproduced defect was a present malformed settings.clients string being silently accepted as an empty list on inbound update. It removed the original running client while reporting success. The implementation owner fixed validation; TestOverlayReviewMalformedClientsCannotEraseRunningUsers now passes and leaves the original client intact.
+
+Final targeted result: all ten original plus supplemental cases pass with go test -overlay ../../work/review-spec-overlay.json ./internal/node -run '^Test(Protocol|OverlayReview)' -count=1 -v. No remaining blocker was found in these reviewed protocol paths. This is a targeted protocol sign-off, not completion of the independent Linux memory, installer, or full-master release gates.
+
+Temporary additional cases: work/review-spec-extra_test.go, mounted via work/review-spec-overlay.json. Run from the module: go test -overlay ../../work/review-spec-overlay.json ./internal/node -run '^TestOverlayReview' -count=1 -v.
+
+Optional master patch delivered in docs/patches/master-reset-inbound-remote-id.patch, with Chinese usage/verification instructions in docs/patches/README.md. git apply --check passed against the unmodified audited master source. The patch resolves the node-local inbound ID from the tag before resetting; it does not touch the database, multiplier calculation, configuration, users, or tokens. Master compilation and deployment-preservation verification remain separate release checks.
+
+Operational limits still needing truthful documentation and the stated release validation: automatic renewal/reset schedules and IP limits are rejected; active-inbound attribution is unavailable (master has a fallback); original Xray is deliberately tied to the agent/service lifecycle on Linux, rather than adopted after an independent agent restart; the master-only multiplier model cannot enforce exact billed totals through indefinite disconnection. No Linux combined-memory or complete master-update results were generated by this review.

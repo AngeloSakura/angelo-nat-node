@@ -2,6 +2,16 @@
 
 本文件记录实际验证范围；CI 原始记录和发布资产 SHA256 是交付依据。v0.1.0 与 v0.1.1 的结果分别标记，不混用内存数字。
 
+## 2026-11-08 真实 NAT VPS 补充验证
+
+完整的[测试与审查报告目录](reports/README.md)已公开，包含三轮实机报告、逐轮结果、脱敏原始证据及早期审查记录。以下实机结果包含操作系统和其他服务，不能用早期 CI 的进程 cgroup 数字代替。
+
+- [无 swap 与缓冲对照](reports/2026-11-08-vps-no-swap/REPORT.md)：默认 32 KiB 缓冲的 1/8/32 路与恢复轮通过；取消缓冲上限导致断流、OOM 或容器重启。
+- [10 用户 + Komari](reports/2026-11-08-ten-users-komari/REPORT.md)：128 MB 共 2,910 次下载通过，但健康接口两次短暂失败；64 MiB 第二轮 80 并发全部失败，不能承诺这种负载稳定。
+- [生产同版程序 + 独立 PostgreSQL 倍率联调](reports/2026-11-08-master-accounting/REPORT.md)：两台共 20 个合成账号最终原始计数、主站基线、逐次 2.5 倍计费和回推账单一致。128 MB 本轮 560 次下载与 40 次健康检查通过；64 MiB 高压统计约 129 秒不更新，恢复后补齐，仍出现整轮下载失败。生产主站仅只读检查，未升级、重启或清零用户流量。
+
+本轮只补充验证记录，没有修复迁移后旧升级器路径遗漏、删除节点清流量反馈或交付 Telegram 告警；生产 PostgreSQL 独立升级保数据验证仍未完成。完整边界见[待完成事项](reports/README.md#尚未完成的事项)。
+
 ## v0.1.1 进程名与低内存验证
 
 [CI 42458620827](https://github.com/AngeloSakura/angelo-nat-node/actions/runs/42458620827)，代码提交 `77338b45e3`：`verify`、`master-node-live`、`master-live` 全部 PASS。Linux CI 使用真实 systemd 启动主面板与轻量节点，读取节点主进程的 `/proc/<pid>/comm` 和 `/proc/<pid>/exe`，确认名称与运行文件均为 `x-ui`。原版 Xray 仍由独立 `xray` 进程运行。迁移器的校验失败、启动失败、部分程序写入及 unit 切换失败恢复均由隔离的文件/systemd mock 测试覆盖；实际 v0.1.0 生产迁移未在真实 VPS 执行。
