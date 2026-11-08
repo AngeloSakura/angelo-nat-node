@@ -31,10 +31,10 @@ printf 'Xray 26.10.31 (official fixture)\n'
 XRAY
  chmod 755 "$case_dir/existing-xui/bin/xray-linux-amd64"
  cp -a "$case_dir/existing-xui" "$case_dir/original-xui"
- cat >"$case_dir/package/angelo-node" <<'NODE'
+ cat >"$case_dir/package/x-ui" <<'NODE'
 #!/bin/sh
 set -eu
-version=v0.1.0
+version=v0.1.1
 mode= config= state= xray= listen=
 while [ "$#" -gt 0 ]; do
  case "$1" in
@@ -66,7 +66,7 @@ esac
 NODE
  printf '#!/bin/sh\nprintf update\n' >"$case_dir/package/update-node.sh"
  cp "$repo/scripts/angelo-node.service" "$case_dir/package/angelo-node.service"
- chmod 755 "$case_dir/package/angelo-node" "$case_dir/package/update-node.sh"
+ chmod 755 "$case_dir/package/x-ui" "$case_dir/package/update-node.sh"
  cat >"$case_dir/bin/id" <<'MOCK'
 #!/bin/sh
 [ "$*" = -u ] || exit 1
@@ -85,8 +85,8 @@ while [ "$#" -gt 0 ]; do
 done
 printf '%s\n' "$url" >>"$TEST_CASE/network-log"
 case "$url" in
- https://github.com/AngeloSakura/angelo-nat-node/releases/download/v0.1.0/SHA256SUMS) cp "$TEST_CASE/releases/SHA256SUMS" "$out";;
- https://github.com/AngeloSakura/angelo-nat-node/releases/download/v0.1.0/angelo-node-linux-amd64.tar.gz) cp "$TEST_CASE/releases/angelo-node-linux-amd64.tar.gz" "$out";;
+ https://github.com/AngeloSakura/angelo-nat-node/releases/download/v0.1.1/SHA256SUMS) cp "$TEST_CASE/releases/SHA256SUMS" "$out";;
+ https://github.com/AngeloSakura/angelo-nat-node/releases/download/v0.1.1/angelo-node-linux-amd64.tar.gz) cp "$TEST_CASE/releases/angelo-node-linux-amd64.tar.gz" "$out";;
  https://github.com/XTLS/Xray-core/releases/download/v26.10.31/Xray-linux-64.zip) printf 'tampered upstream asset\n' >"$out";;
  *) exit 60;;
 esac
@@ -116,7 +116,7 @@ replacements = {
  'config_dir=/etc/angelo-node': 'config_dir=' + shlex.quote(case + '/destination/etc/angelo-node'),
  'state_dir=/var/lib/angelo-node': 'state_dir=' + shlex.quote(case + '/destination/var/lib/angelo-node'),
  'library_dir=/usr/local/lib/angelo-node': 'library_dir=' + shlex.quote(case + '/destination/usr/local/lib/angelo-node'),
- 'binary=/usr/local/bin/angelo-node': 'binary=' + shlex.quote(case + '/destination/usr/local/bin/angelo-node'),
+ 'binary=/usr/local/bin/x-ui': 'binary=' + shlex.quote(case + '/destination/usr/local/bin/x-ui'),
  'updater=/usr/local/bin/angelo-node-update': 'updater=' + shlex.quote(case + '/destination/usr/local/bin/angelo-node-update'),
  'unit=/etc/systemd/system/angelo-node.service': 'unit=' + shlex.quote(case + '/destination/etc/systemd/system/angelo-node.service'),
  'lock=/run/lock/angelo-node-install.lock': 'lock=' + shlex.quote(case + '/destination/run/lock/angelo-node-install.lock'),
@@ -131,26 +131,27 @@ PY
  package_release
 }
 package_release() {
- tar -czf "$case_dir/releases/angelo-node-linux-amd64.tar.gz" -C "$case_dir/package" angelo-node update-node.sh angelo-node.service
+ tar -czf "$case_dir/releases/angelo-node-linux-amd64.tar.gz" -C "$case_dir/package" x-ui update-node.sh angelo-node.service
  (cd "$case_dir/releases"; sha256sum angelo-node-linux-amd64.tar.gz >SHA256SUMS)
 }
 run_install() {
  local rc=0
- sh "$case_dir/installer.sh" v0.1.0 >"$case_dir/output" 2>&1 || rc=$?
+ sh "$case_dir/installer.sh" v0.1.1 >"$case_dir/output" 2>&1 || rc=$?
  if [[ $1 == success ]]; then [[ $rc == 0 ]] || fail "expected success, got $rc";
  else [[ $rc != 0 ]] || fail 'expected refusal/failure'; fi
  if grep -q private-secret-do-not-print "$case_dir/output"; then fail 'installer leaked token'; fi
  diff -r -- "$case_dir/original-xui" "$case_dir/existing-xui" >/dev/null || fail 'old master or Xray changed'
 }
 assert_no_install() {
- [[ ! -e $case_dir/destination/etc/angelo-node && ! -e $case_dir/destination/var/lib/angelo-node && ! -e $case_dir/destination/usr/local/bin/angelo-node ]] || fail 'preflight failure wrote installation files'
+ [[ ! -e $case_dir/destination/etc/angelo-node && ! -e $case_dir/destination/var/lib/angelo-node && ! -e $case_dir/destination/usr/local/bin/x-ui ]] || fail 'preflight failure wrote installation files'
  [[ ! -s $case_dir/service-log ]] || fail 'preflight failure touched services'
 }
 
 create_case fresh
 run_install success
 assert_same "$case_dir/original-xui/bin/xray-linux-amd64" "$case_dir/destination/usr/local/lib/angelo-node/xray"
-assert_same "$case_dir/package/angelo-node" "$case_dir/destination/usr/local/bin/angelo-node"
+assert_same "$case_dir/package/x-ui" "$case_dir/destination/usr/local/bin/x-ui"
+grep -q '^ExecStart=/usr/local/bin/x-ui ' "$case_dir/destination/etc/systemd/system/angelo-node.service" || fail 'installed unit does not run x-ui executable'
 [[ -s $case_dir/health-log ]] || fail 'authenticated API/Xray health was not checked'
 [[ $(cat "$case_dir/service-status") == active ]] || fail 'new service inactive'
 cp -a "$case_dir/destination" "$case_dir/snapshot"
@@ -199,7 +200,7 @@ assert_no_install
 printf 'PASS duplicate checksum record is rejected\n'
 
 create_case wrong-version
-sed -i 's/version=v0.1.0/version=v0.0.9/' "$case_dir/package/angelo-node"
+sed -i 's/version=v0.1.1/version=v0.0.9/' "$case_dir/package/x-ui"
 package_release
 run_install failure
 assert_no_install
@@ -212,12 +213,12 @@ import io, pathlib, sys, tarfile
 case = pathlib.Path(sys.argv[1]); variant = sys.argv[2]
 archive = case / 'releases/angelo-node-linux-amd64.tar.gz'
 with tarfile.open(archive, 'w:gz') as tar:
- for name in ('angelo-node', 'update-node.sh', 'angelo-node.service'):
-  if name == 'angelo-node' and variant == 'symlink':
+ for name in ('x-ui', 'update-node.sh', 'angelo-node.service'):
+  if name == 'x-ui' and variant == 'symlink':
    item=tarfile.TarInfo(name);item.type=tarfile.SYMTYPE;item.linkname=str(case/'outside');tar.addfile(item)
   elif not (name == 'angelo-node.service' and variant == 'missing'):
    tar.add(case/'package'/name, arcname=name)
- if variant == 'duplicate': tar.add(case/'package/angelo-node', arcname='angelo-node')
+ if variant == 'duplicate': tar.add(case/'package/x-ui', arcname='x-ui')
  if variant == 'traversal':
   for name in ('../escaped', str(case/'absolute-escaped')):
    value=b'UNEXPECTED EXTRACTION';item=tarfile.TarInfo(name);item.size=len(value);tar.addfile(item,io.BytesIO(value))

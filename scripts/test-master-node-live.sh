@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Real unchanged upstream master -> built angelo-node -> unchanged bundled Xray.
+# Real unchanged upstream master -> lightweight node named x-ui -> unchanged bundled Xray.
 # Run only on a disposable Linux amd64 root/systemd CI runner:
 # sudo bash scripts/test-master-node-live.sh /absolute/path/to/angelo-node
 # Uses loopback HTTP strictly inside this isolated fixture, never for deployment.
@@ -42,8 +42,8 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 mkdir "$root/install" "$root/db" "$root/log" "$root/backups" "$root/node"
-cp -- "$agent" "$root/node/angelo-node"
-chmod 755 "$root/node/angelo-node"
+cp -- "$agent" "$root/node/x-ui"
+chmod 755 "$root/node/x-ui"
 echo 'Downloading SHA-pinned upstream v1.0.0 master and its original Xray...'
 curl -q -fLsS --proto '=https' --proto-redir '=https' --tlsv1.2 --connect-timeout 15 --max-time 180 --max-filesize 134217728 \
     --output "$root/master.tar.gz" -- https://github.com/AngeloSakura/Angelo-xui-plugin-2/releases/download/v1.0.0/x-ui-linux-amd64.tar.gz
@@ -249,7 +249,7 @@ for role in master node; do
     if [[ $role == master ]]; then
         service=$master_service; executable=$root/install/x-ui; arguments=; directory=$root/install
     else
-        service=$node_service; executable=$root/node/angelo-node; arguments=" -config $root/node/config.json"; directory=$root/node
+        service=$node_service; executable=$root/node/x-ui; arguments=" -config $root/node/config.json"; directory=$root/node
     fi
     [[ ! -e /run/systemd/system/$service ]] || { echo 'Temporary unit name collision.' >&2; exit 1; }
     cat >"/run/systemd/system/$service" <<UNIT
@@ -284,5 +284,9 @@ done
 systemctl daemon-reload
 systemctl start "$node_service"
 systemctl start "$master_service"
+node_pid=$(systemctl show --property=MainPID --value "$node_service")
+[[ $node_pid =~ ^[1-9][0-9]*$ ]] || { echo 'Node service has no live MainPID' >&2; exit 1; }
+[[ $(cat "/proc/$node_pid/comm") == x-ui ]] || { echo 'Node executable process name is not x-ui' >&2; exit 1; }
+[[ $(readlink -f "/proc/$node_pid/exe") == "$root/node/x-ui" ]] || { echo 'Node process is not running the x-ui executable' >&2; exit 1; }
 echo 'Running real master API control, multiplier synchronization and billed-quota enforcement...'
 timeout --signal=TERM --kill-after=10s 330s python3 "$root/interoperability.py" run "$root"

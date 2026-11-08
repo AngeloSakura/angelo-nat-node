@@ -49,7 +49,7 @@ def probe(memory):
     directory = pathlib.Path(tempfile.mkdtemp(prefix='angelo-mem-'))
     # Unique executable inodes + cache eviction prevent earlier CI integration
     # tests charging shared Xray code pages to a different cgroup.
-    test_agent, test_xray = directory/'angelo-node', directory/'xray'
+    test_agent, test_xray = directory/'x-ui', directory/'xray'
     shutil.copy2(agent,test_agent)
     shutil.copy2(xray,test_xray)
     state = directory / 'state'

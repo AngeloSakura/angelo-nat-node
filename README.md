@@ -2,7 +2,7 @@
 
 面向小内存 NAT VPS 的无界面节点：保留原版 Xray 二进制，用轻量 Go API 进程替代整套 3x-ui。已有的 [Angelo-xui-plugin-2 主面板](https://github.com/AngeloSakura/Angelo-xui-plugin-2) 通过 API Token 管理入站、用户和流量；倍率只由主面板计算。
 
-这是独立节点程序，不是完整 3x-ui。节点没有网页、SQLite、订阅服务、Telegram、自动更新线程，也不把 Xray 核心链接进自己的进程。NAT VPS 上直接运行预编译包，无需 Go、Node.js、Python 或 Docker。
+这是独立节点程序，不是完整 3x-ui。节点没有网页、SQLite、订阅服务、Telegram、自动更新线程，也不把 Xray 核心链接进自己的进程。节点管理可执行文件和 Linux 进程名为 `x-ui`，原版 Xray 子进程名为 `xray`；名称不代表它与原版面板具有相同功能，也不能保证符合服务商的条款。NAT VPS 上直接运行预编译包，无需 Go、Node.js、Python 或 Docker。
 
 ## 内存与适用范围
 
@@ -19,24 +19,36 @@
 支持 systemd Linux：amd64、arm64、386、armv7；运行验证以 Linux amd64 为准，其他架构仅交叉编译。需要 root、`curl`、`tar`、`sha256sum`、`systemctl`、`install`、`flock`；下载官方 Xray 时还需要 `unzip`。
 
 ```bash
-curl -fL --retry 3 https://github.com/AngeloSakura/angelo-nat-node/releases/download/v0.1.0/install.sh -o /tmp/angelo-node-install.sh
-sudo sh /tmp/angelo-node-install.sh v0.1.0
-sudo angelo-node -show
+curl -fL --retry 3 https://github.com/AngeloSakura/angelo-nat-node/releases/download/v0.1.1/install.sh -o /tmp/angelo-node-install.sh
+sudo sh /tmp/angelo-node-install.sh v0.1.1
+sudo /usr/local/bin/x-ui -show
 ```
 
 安装器校验版本包 SHA256。默认复用已安装的 Xray（复制字节，不改旧文件），找不到时下载固定官方 `v26.10.31` 并校验预设 SHA256。也可显式指定：
 
 ```bash
 sudo env XRAY_BINARY=/usr/local/x-ui/bin/xray-linux-amd64 \
-  ANGELO_LISTEN=:2053 sh /tmp/angelo-node-install.sh v0.1.0
+  ANGELO_LISTEN=:2053 sh /tmp/angelo-node-install.sh v0.1.1
 ```
 
 已有配置时安装器直接退出；**重复安装不是升级方法**。它不导入、不删除旧 x-ui 数据库，不停止旧 x-ui。旧面板和新节点不能同时占用相同 API/代理端口，请先保留旧配置、计划切换，并在新节点验证成功后手动停用旧节点面板。
 
+### 从 v0.1.0 更名迁移
+
+旧版管理进程仍叫 `angelo-node`，普通升级器只替换原路径，不能更名。已安装 v0.1.0 的机器使用一次性迁移器；它要求旧服务健康、目标 `/usr/local/bin/x-ui` 不存在，并在停机后备份旧程序、unit、配置和完整状态目录。失败时恢复旧 unit 与程序，不回灌旧流量。
+
+```bash
+curl -fL --retry 3 https://github.com/AngeloSakura/angelo-nat-node/releases/download/v0.1.1/migrate-v0.1.0.sh -o /tmp/angelo-migrate-name.sh
+sudo sh /tmp/angelo-migrate-name.sh
+sudo /usr/local/bin/x-ui -health-check
+```
+
+迁移后继续使用 `sudo angelo-node-update <固定版本>`。不要将新安装器直接运行在旧配置上；它会拒绝覆盖。
+
 ## 主面板连接 NAT 节点
 
 1. 在 NAT 提供商控制台配置 TCP 映射：一个用于管理 API，另一个或多个用于实际代理入站。入站监听的是 VPS 内部端口，客户端使用映射后的外部端口；需要 UDP 的协议另配 UDP 映射。
-2. 节点运行 `sudo angelo-node -show`，读取 API Token 和 TLS SHA256 指纹。Token 是完整管理权限密钥，不要公开。
+2. 节点运行 `sudo /usr/local/bin/x-ui -show`，读取 API Token 和 TLS SHA256 指纹。Token 是完整管理权限密钥，不要公开。
 3. 已有 Angelo 主面板的节点管理中添加节点：协议 `https`，地址填 NAT 公网 IP/域名，端口填 API **外部映射端口**，basePath `/`，填节点 Token。
 4. TLS 验证选 `pin`，`pinnedCertSha256` 填本机输出的指纹。自签名证书默认不匹配公网域名，使用明确指纹绑定；不要长期选择跳过验证。确实通过可信内网连接时，按主面板要求开启私网地址许可。
 5. 先测试连接，再在主面板创建/同步入站和客户端。节点 `GUID` 首次创建后持久保存；升级时不变化。
@@ -49,8 +61,8 @@ sudo env XRAY_BINARY=/usr/local/x-ui/bin/xray-linux-amd64 \
 节点升级只替换管理程序，备份原程序、指定的 config.json 和整个状态目录，保留 Token、证书、GUID、用户、计数以及原版 Xray。证书文件及其他外部配置需另行备份：
 
 ```bash
-sudo angelo-node-update v0.1.0
-sudo angelo-node -health-check
+sudo angelo-node-update v0.1.1
+sudo /usr/local/bin/x-ui -health-check
 ```
 
 必须填写固定版本；不会自动追踪 latest。新版本启动失败会尝试恢复旧可执行文件，**不回灌旧计数覆盖新计数**。旧程序无法读取新 schema 时保留备份并停机等待恢复，不宣称成功。自定义路径参数见 `angelo-node-update --help`。
@@ -61,7 +73,7 @@ sudo angelo-node -health-check
 
 | 项目 | 默认位置 |
 | --- | --- |
-| 管理程序 | `/usr/local/bin/angelo-node` |
+| 管理程序 | `/usr/local/bin/x-ui` |
 | 配置、Token、TLS | `/etc/angelo-node/` |
 | 用户和累计计数 | `/var/lib/angelo-node/state.json` |
 | 生成的 Xray 配置 | `/var/lib/angelo-node/xray.json` |
@@ -71,8 +83,8 @@ sudo angelo-node -health-check
 ```bash
 sudo systemctl status angelo-node
 sudo journalctl -u angelo-node -n 50 --no-pager
-sudo angelo-node -check         # 严格只读，缺失状态会报错，不新建用户库
-sudo angelo-node -health-check  # 验证当前 Xray stats 响应和节点 API
+sudo /usr/local/bin/x-ui -check         # 严格只读，缺失状态会报错，不新建用户库
+sudo /usr/local/bin/x-ui -health-check  # 验证当前 Xray stats 响应和节点 API
 ```
 
 修改配置需重启服务。修改 `stateDir` 时还需同步 systemd 的 `ReadWritePaths` 并迁移完整状态目录，不能把空目录当成更新。不要删除 state.json 来修复启动错误，否则会失去节点身份和累计计数。
@@ -98,6 +110,7 @@ XRAY_BINARY=/path/to/original/xray go test -race -count=1 ./...
 bash scripts/test-update-master.sh
 sudo bash scripts/test-update-node.sh
 bash scripts/test-install.sh
+bash scripts/test-migrate-v0.1.0.sh
 bash scripts/package.sh
 sudo python3 scripts/memory-test.py dist/angelo-node-linux-amd64 /path/to/original/xray
 sudo bash scripts/test-master-live.sh

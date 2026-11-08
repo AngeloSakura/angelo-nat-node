@@ -14,7 +14,7 @@ assert_same() { cmp -s -- "$1" "$2" || fail "content differs: $1 / $2"; }
 create_case() {
  case_dir=$root/$1
  mkdir -p -- "$case_dir/bin" "$case_dir/installation" "$case_dir/custom state" "$case_dir/configuration" "$case_dir/releases" "$case_dir/package" "$case_dir/tmp"
- export TEST_CASE=$case_dir TEST_MODE=success TEST_BINARY=$case_dir/installation/angelo-node TEST_STATE_DIR=$case_dir/'custom state'
+ export TEST_CASE=$case_dir TEST_MODE=success TEST_BINARY=$case_dir/installation/x-ui TEST_STATE_DIR=$case_dir/'custom state'
  export TMPDIR=$case_dir/tmp
  export PATH=$case_dir/bin:$original_path
  printf 'active\n' >"$case_dir/service-status"
@@ -45,12 +45,12 @@ case "$mode" in
  -state-dir-path) printf '%s\n' "$TEST_STATE_DIR";;
  -check)
   [ -f "$TEST_STATE_DIR/state.json" ] || exit 32
-  if [ "$version" = v0.1.0 ] && [ "$TEST_MODE" = reject-check ]; then exit 33; fi
+  if [ "$version" = v0.1.1 ] && [ "$TEST_MODE" = reject-check ]; then exit 33; fi
   if [ "$version" = v0.0.9 ] && [ "$TEST_MODE" = incompatible-state ] && [ -f "$TEST_CASE/new-started" ]; then exit 34; fi
   ;;
  -health-check)
   printf '%s\n' "health:$version" >>"$TEST_CASE/health-log"
-  if [ "$version" = v0.1.0 ]; then
+  if [ "$version" = v0.1.1 ]; then
    case "$TEST_MODE" in failed-health|advanced-state|incompatible-state) exit 35;; esac
   fi
   ;;
@@ -58,8 +58,8 @@ case "$mode" in
 esac
 NODE
  sed 's/VERSION_MARKER/v0.0.9/' "$case_dir/node-template" >"$TEST_BINARY"
- sed 's/VERSION_MARKER/v0.1.0/' "$case_dir/node-template" >"$case_dir/package/angelo-node"
- chmod 755 "$TEST_BINARY" "$case_dir/package/angelo-node"
+ sed 's/VERSION_MARKER/v0.1.1/' "$case_dir/node-template" >"$case_dir/package/x-ui"
+ chmod 755 "$TEST_BINARY" "$case_dir/package/x-ui"
  cp "$TEST_BINARY" "$case_dir/original-node"
  cat >"$case_dir/bin/id" <<'MOCK'
 #!/bin/sh
@@ -78,8 +78,8 @@ while [ "$#" -gt 0 ]; do
  case "$1" in -o) out=$2; shift 2;; --retry|--connect-timeout|--max-filesize) shift 2;; https://*) url=$1;shift;; *) shift;; esac
 done
 case "$url" in
- https://github.com/AngeloSakura/angelo-nat-node/releases/download/v0.1.0/SHA256SUMS) cp "$TEST_CASE/releases/SHA256SUMS" "$out";;
- https://github.com/AngeloSakura/angelo-nat-node/releases/download/v0.1.0/angelo-node-linux-amd64.tar.gz) cp "$TEST_CASE/releases/angelo-node-linux-amd64.tar.gz" "$out";;
+ https://github.com/AngeloSakura/angelo-nat-node/releases/download/v0.1.1/SHA256SUMS) cp "$TEST_CASE/releases/SHA256SUMS" "$out";;
+ https://github.com/AngeloSakura/angelo-nat-node/releases/download/v0.1.1/angelo-node-linux-amd64.tar.gz) cp "$TEST_CASE/releases/angelo-node-linux-amd64.tar.gz" "$out";;
  *) exit 40;;
 esac
 MOCK
@@ -88,7 +88,12 @@ MOCK
 set -eu
 printf '%s\n' "$*" >>"$TEST_CASE/service-log"
 case "$1" in
- show) echo loaded;;
+ show)
+  case "$*" in
+   *'--property=LoadState'*) echo loaded;;
+   *'--property=ExecStart'*) printf '{ path=%s ; argv[]=%s -config %s ; }\n' "$TEST_BINARY" "$TEST_BINARY" "$TEST_CASE/configuration/config.json";;
+   *) exit 42;;
+  esac;;
  is-active) [ "$(cat "$TEST_CASE/service-status")" = active ];;
  stop)
   [ "$TEST_MODE" != stop-fails ] || exit 41
@@ -96,7 +101,7 @@ case "$1" in
   ;;
  start)
   version=$("$TEST_BINARY" -version)
-  if [ "$version" = v0.1.0 ]; then
+  if [ "$version" = v0.1.1 ]; then
    : >"$TEST_CASE/new-started"
    case "$TEST_MODE" in advanced-state|incompatible-state) cp "$TEST_CASE/advanced-state.json" "$TEST_STATE_DIR/state.json";; esac
   fi
@@ -109,12 +114,12 @@ MOCK
  package_release
 }
 package_release() {
- tar -czf "$case_dir/releases/angelo-node-linux-amd64.tar.gz" -C "$case_dir/package" angelo-node
+ tar -czf "$case_dir/releases/angelo-node-linux-amd64.tar.gz" -C "$case_dir/package" x-ui
  (cd "$case_dir/releases"; sha256sum angelo-node-linux-amd64.tar.gz >SHA256SUMS)
 }
 run_update() {
  local rc=0
- sh "$updater" v0.1.0 --config "$case_dir/configuration/config.json" --binary "$TEST_BINARY" --service test-node.service --backup-root "$case_dir/backups" --startup-timeout 1 >"$case_dir/output" 2>&1 || rc=$?
+ sh "$updater" v0.1.1 --config "$case_dir/configuration/config.json" --binary "$TEST_BINARY" --service test-node.service --backup-root "$case_dir/backups" --startup-timeout 1 >"$case_dir/output" 2>&1 || rc=$?
  if [[ $1 == success ]]; then [[ $rc == 0 ]] || fail "expected successful update; exit=$rc";
  else [[ $rc != 0 ]] || fail 'expected update failure'; fi
  if grep -q private-token-do-not-print "$case_dir/output"; then fail 'updater leaked config token'; fi
@@ -124,19 +129,19 @@ assert_immutable() {
  assert_same "$case_dir/original-xray" "$case_dir/installation/xray"
 }
 find_backup() {
- backup=$(find "$case_dir/backups" -mindepth 1 -maxdepth 1 -type d -name 'v0.1.0-*' -print)
+ backup=$(find "$case_dir/backups" -mindepth 1 -maxdepth 1 -type d -name 'v0.1.1-*' -print)
  [[ -n $backup && -d $backup ]] || fail 'expected one private backup'
 }
 
 create_case success
 run_update success
-[[ $("$TEST_BINARY" -version) == v0.1.0 ]] || fail 'new executable was not installed'
+[[ $("$TEST_BINARY" -version) == v0.1.1 ]] || fail 'new executable was not installed'
 assert_immutable
 assert_same "$case_dir/original-state.json" "$TEST_STATE_DIR/state.json"
 find_backup
 assert_same "$case_dir/original-state.json" "$backup/state/state.json"
-assert_same "$case_dir/original-node" "$backup/angelo-node"
-grep -q '^health:v0.1.0$' "$case_dir/health-log" || fail 'new executable health was not checked'
+assert_same "$case_dir/original-node" "$backup/x-ui"
+grep -q '^health:v0.1.1$' "$case_dir/health-log" || fail 'new executable health was not checked'
 printf 'PASS successful update preserves custom state, token, certificate, counters and Xray\n'
 
 create_case failed-health

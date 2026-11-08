@@ -23,7 +23,7 @@
 在主面板机器下载本项目发布的独立升级器，明确选择**主面板仓库**的稳定 release tag：
 
 ```bash
-curl -fL --retry 3 https://github.com/AngeloSakura/angelo-nat-node/releases/download/v0.1.0/update-master.sh -o /tmp/angelo-master-update.sh
+curl -fL --retry 3 https://github.com/AngeloSakura/angelo-nat-node/releases/download/v0.1.1/update-master.sh -o /tmp/angelo-master-update.sh
 sudo bash /tmp/angelo-master-update.sh --version v1.0.0
 ```
 

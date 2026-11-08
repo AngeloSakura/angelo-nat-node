@@ -68,6 +68,7 @@ jobs:
           if [ -f scripts/test-update-master.sh ]; then bash scripts/test-update-master.sh; fi
           if [ -f scripts/test-update-node.sh ]; then sudo bash scripts/test-update-node.sh; fi
           bash scripts/test-install.sh
+          bash scripts/test-migrate-v0.1.0.sh
       - name: Build binaries off the NAT VPS
         run: bash scripts/package.sh
       - name: Test 64 and 128 MiB process cgroups

@@ -3,7 +3,7 @@ set -eu
 umask 077
 fail() { printf '%s\n' "ERROR: $*" >&2; exit 1; }
 repo=AngeloSakura/angelo-nat-node
-version=${1:-v0.1.0}
+version=${1:-v0.1.1}
 [ "$#" -le 1 ] || fail 'Usage: install.sh vX.Y.Z'
 case "$version" in v[0-9]*.[0-9]*.[0-9]*) ;; *) fail 'Usage: install.sh vX.Y.Z';; esac
 case "$version" in *[!a-zA-Z0-9._-]*) fail 'Invalid release tag';; esac
@@ -15,7 +15,7 @@ done
 config_dir=/etc/angelo-node
 state_dir=/var/lib/angelo-node
 library_dir=/usr/local/lib/angelo-node
-binary=/usr/local/bin/angelo-node
+binary=/usr/local/bin/x-ui
 updater=/usr/local/bin/angelo-node-update
 unit=/etc/systemd/system/angelo-node.service
 lock=/run/lock/angelo-node-install.lock
@@ -53,13 +53,13 @@ curl -fL --retry 3 --connect-timeout 15 --max-filesize 1048576 "$base/SHA256SUMS
 (cd "$stage"; awk -v name="$asset" '$2==name || $2=="*"name {if(length($1)!=64 || $1~/[^0-9a-fA-F]/ || NF!=2) exit 1; print $1 "  " name; count++} END {if(count!=1) exit 1}' SHA256SUMS > selected; sha256sum -c selected)
 # Stream only expected members; never unpack arbitrary paths or links.
 tar -tzf "$stage/$asset" >"$stage/members"
-for member in angelo-node update-node.sh angelo-node.service; do
+for member in x-ui update-node.sh angelo-node.service; do
  awk -v name="$member" '$0==name {count++} END {if(count!=1) exit 1}' "$stage/members" || fail "Archive must contain exactly one $member"
  tar -xOzf "$stage/$asset" "$member" >"$stage/$member"
  [ -s "$stage/$member" ] || fail "Release member is empty or not a regular file: $member"
 done
-chmod 755 "$stage/angelo-node"
-[ "$("$stage/angelo-node" -version)" = "$version" ] || fail 'Release executable version does not match requested tag'
+chmod 755 "$stage/x-ui"
+[ "$("$stage/x-ui" -version)" = "$version" ] || fail 'Release executable version does not match requested tag'
 # Existing Xray is copied byte-for-byte. The old service is never stopped.
 existing=${XRAY_BINARY:-}
 if [ -z "$existing" ]; then
@@ -90,7 +90,7 @@ fi
 # All artifacts are checked before creating installation files.
 install -d -m 700 "$config_dir" "$state_dir" "$state_dir/backups"
 install -d -m 755 "$library_dir" "${binary%/*}"
-install -m 755 "$stage/angelo-node" "$binary"
+install -m 755 "$stage/x-ui" "$binary"
 install -m 755 "$stage/update-node.sh" "$updater"
 install -m 755 "$stage/xray" "$library_dir/xray"
 "$binary" -config "$config_dir/config.json" -init -listen "${ANGELO_LISTEN:-:2053}" -state-dir "$state_dir" -xray "$library_dir/xray"
@@ -105,4 +105,4 @@ while :; do
  sleep 1
 done
 completed=1
-printf '%s\n' 'Installed. Use angelo-node -show to display the token. Map this API port through NAT and pin the certificate in the master.'
+printf '%s\n' 'Installed. Use /usr/local/bin/x-ui -show to display the token. Map this API port through NAT and pin the certificate in the master.'

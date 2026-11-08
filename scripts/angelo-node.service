@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/angelo-node -config /etc/angelo-node/config.json
+ExecStart=/usr/local/bin/x-ui -config /etc/angelo-node/config.json
 Restart=on-failure
 RestartSec=3
 TimeoutStopSec=15

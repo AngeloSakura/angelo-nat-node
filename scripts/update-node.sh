@@ -6,7 +6,7 @@ usage() {
  cat <<'USAGE'
 Usage: angelo-node-update vX.Y.Z [options]
   --config PATH          Existing config (default: /etc/angelo-node/config.json)
-  --binary PATH          Existing node executable (default: /usr/local/bin/angelo-node)
+  --binary PATH          Existing node executable (default: /usr/local/bin/x-ui)
   --service NAME         Existing systemd service (default: angelo-node.service)
   --backup-root PATH     Private backups (default: /var/backups/angelo-node)
   --startup-timeout N    Health deadline in seconds, 1-300 (default: 30)
@@ -18,7 +18,7 @@ version=${1:-}
 case "$version" in --help|-h) usage;exit 0;; v[0-9]*.[0-9]*.[0-9]*) shift;; *) usage >&2;exit 1;; esac
 case "$version" in *[!a-zA-Z0-9._-]*) fail 'Invalid release tag';; esac
 config=/etc/angelo-node/config.json
-binary=/usr/local/bin/angelo-node
+binary=/usr/local/bin/x-ui
 service=angelo-node.service
 backup_root=/var/backups/angelo-node
 startup_timeout=30
@@ -50,6 +50,7 @@ done
 [ -f "$binary" ] && [ -x "$binary" ] && [ ! -L "$binary" ] || fail 'Executable must be an existing regular executable, not a symlink'
 config=$(realpath -e -- "$config")
 binary=$(realpath -e -- "$binary")
+[ "${binary##*/}" = x-ui ] || fail 'This release requires an x-ui executable. Migrate v0.1.0 first.'
 backup_root=$(realpath -m -- "$backup_root")
 [ "$backup_root" != / ] || fail 'Refusing backups at filesystem root'
 install -d -m 700 "$backup_root"
@@ -86,7 +87,7 @@ recover() {
   systemctl stop "$service" >/dev/null 2>&1
   if systemctl is-active --quiet "$service"; then
    printf '%s\n' 'CRITICAL: service did not stop; executable rollback refused. Inspect private backup.' >&2
-  elif ! atomic_binary "$backup/angelo-node"; then
+  elif ! atomic_binary "$backup/x-ui"; then
    printf '%s\n' 'CRITICAL: executable rollback failed. Service left stopped; recover from private backup.' >&2
   else
    # Preserve evidence from a failed start, and never overwrite newer counters.
@@ -127,12 +128,12 @@ curl -fL --retry 3 --connect-timeout 15 --max-filesize 1048576 "$base/SHA256SUMS
 (cd "$stage"; awk -v name="$asset" '$2==name || $2=="*"name {if(length($1)!=64 || $1~/[^0-9a-fA-F]/ || NF!=2) exit 1; print $1 "  " name; count++} END {if(count!=1) exit 1}' SHA256SUMS > selected; sha256sum -c selected)
 # Stream only the executable into an already-created regular file. Archive paths
 # and symlinks are never extracted into the installation or the staging tree.
-tar -tzf "$stage/$asset" | awk '$0=="angelo-node" {count++} END {if(count!=1) exit 1}' || fail 'Archive must contain exactly one node executable'
-tar -xOzf "$stage/$asset" angelo-node >"$stage/angelo-node"
-[ -s "$stage/angelo-node" ] || fail 'Release executable is empty or missing'
-chmod 755 "$stage/angelo-node"
-[ "$("$stage/angelo-node" -version)" = "$version" ] || fail 'Release executable version does not match requested tag'
-state_dir=$("$stage/angelo-node" -config "$config" -state-dir-path) || fail 'Cannot resolve configured state directory'
+tar -tzf "$stage/$asset" | awk '$0=="x-ui" {count++} END {if(count!=1) exit 1}' || fail 'Archive must contain exactly one node executable'
+tar -xOzf "$stage/$asset" x-ui >"$stage/x-ui"
+[ -s "$stage/x-ui" ] || fail 'Release executable is empty or missing'
+chmod 755 "$stage/x-ui"
+[ "$("$stage/x-ui" -version)" = "$version" ] || fail 'Release executable version does not match requested tag'
+state_dir=$("$stage/x-ui" -config "$config" -state-dir-path) || fail 'Cannot resolve configured state directory'
 case "$state_dir" in /*) ;; *) fail 'State directory must be absolute';; esac
 [ -d "$state_dir" ] && [ ! -L "$state_dir" ] || fail 'State directory must exist and must not be a symlink'
 state_dir=$(realpath -e -- "$state_dir")
@@ -140,9 +141,11 @@ state_dir=$(realpath -e -- "$state_dir")
 [ -f "$state_dir/state.json" ] && [ ! -L "$state_dir/state.json" ] || fail 'Existing state.json required; refusing to initialize missing state'
 case "$backup_root/" in "$state_dir/"*) fail 'Backup root must be outside the state directory';; esac
 case "$binary" in "$state_dir/"*) fail 'Executable must be outside the state directory';; esac
-"$stage/angelo-node" -config "$config" -check >/dev/null || fail 'New executable cannot read existing configuration/state'
+"$stage/x-ui" -config "$config" -check >/dev/null || fail 'New executable cannot read existing configuration/state'
 load_state=$(systemctl show --property=LoadState --value "$service")
 [ "$load_state" = loaded ] || fail 'Configured systemd service is not loaded'
+unit_exec=$(systemctl show --property=ExecStart --value "$service")
+case "$unit_exec" in *"path=$binary "*) ;; *) fail 'Loaded service does not execute the selected x-ui binary';; esac
 if systemctl is-active --quiet "$service"; then was_active=1; fi
 if [ "$was_active" = 1 ]; then
  # Set before stopping so an interrupted stop still attempts safe recovery.
@@ -151,14 +154,14 @@ if [ "$was_active" = 1 ]; then
 fi
 if systemctl is-active --quiet "$service"; then fail 'Service is still active; refusing backup and replacement'; fi
 backup=$(mktemp -d "$backup_root/$version-$(date -u +%Y%m%dT%H%M%SZ).XXXXXX")
-cp -p -- "$binary" "$backup/angelo-node"
+cp -p -- "$binary" "$backup/x-ui"
 cp -p -- "$config" "$backup/config.json"
 cp -a -- "$state_dir" "$backup/state"
 printf 'version=%s\nservice=%s\nconfig=%s\nstate_dir=%s\nbinary=%s\n' "$version" "$service" "$config" "$state_dir" "$binary" >"$backup/paths.txt"
 # Recheck after the service's final checkpoint before replacing anything.
-"$stage/angelo-node" -config "$config" -check >/dev/null
+"$stage/x-ui" -config "$config" -check >/dev/null
 replaced=1
-atomic_binary "$stage/angelo-node"
+atomic_binary "$stage/x-ui"
 if [ "$was_active" = 1 ]; then
  systemctl start "$service"
  wait_healthy || fail 'New node failed authenticated API/Xray health check'
