@@ -71,6 +71,12 @@ jobs:
           bash scripts/test-migrate-v0.1.0.sh
       - name: Build binaries off the NAT VPS
         run: bash scripts/package.sh
+      - name: Smoke-test packaged Linux executable and checksums
+        run: |
+          (cd dist && sha256sum -c SHA256SUMS)
+          tar -xOzf dist/angelo-node-linux-amd64.tar.gz x-ui > /tmp/package-x-ui
+          chmod 755 /tmp/package-x-ui
+          test "$(/tmp/package-x-ui -version)" = v0.1.1
       - name: Test 64 and 128 MiB process cgroups
         run: sudo python3 scripts/memory-test.py dist/angelo-node-linux-amd64 /tmp/angelo-xray/xray | tee /tmp/memory-results.json
       - uses: actions/upload-artifact@v4
