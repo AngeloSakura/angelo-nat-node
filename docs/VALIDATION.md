@@ -1,8 +1,23 @@
 # 发布验证记录
 
-本文件记录实际验证范围；CI 原始记录和发布资产 SHA256 是交付依据。发布前列出的三组 Linux 检查均已通过。
+本文件记录实际验证范围；CI 原始记录和发布资产 SHA256 是交付依据。v0.1.0 与 v0.1.1 的结果分别标记，不混用内存数字。
 
-## 测试对象
+## v0.1.1 进程名与低内存验证
+
+[CI 42458620827](https://github.com/AngeloSakura/angelo-nat-node/actions/runs/42458620827)，代码提交 `77338b45e3`：`verify`、`master-node-live`、`master-live` 全部 PASS。Linux CI 使用真实 systemd 启动主面板与轻量节点，读取节点主进程的 `/proc/<pid>/comm` 和 `/proc/<pid>/exe`，确认名称与运行文件均为 `x-ui`。原版 Xray 仍由独立 `xray` 进程运行。迁移器的校验失败、启动失败、部分程序写入及 unit 切换失败恢复均由隔离的文件/systemd mock 测试覆盖；实际 v0.1.0 生产迁移未在真实 VPS 执行。
+
+同一 Ubuntu 24.04 runner 上的两个独立 systemd 服务模拟主站和节点，不是两台独立 VPS，也没有模拟公网时延。主站实际通过 API 创建节点/用户、同步 2.5 倍用量、触发已计费额度停用与恢复；[联调原始输出](validation/master-node-live-v0.1.1.txt)。主站自己的同版本升级保留登录、Token、用户、非零流量、倍率、密钥及原版 Xray 校验和；[原始输出](validation/master-live-v0.1.1.txt)。
+
+管理进程与原版 Xray 共用一个无 swap cgroup，客户端与本地 HTTP 目标在组外。一个 VLESS TCP 用户，8/32 路各传 8 MiB；结果见 [v0.1.1 内存原始数据](validation/memory-linux-amd64-v0.1.1.json)。
+
+| cgroup 限制 | 全程合计峰值 | 32 路传输时间 | OOM kill |
+| --- | ---: | ---: | ---: |
+| 64 MiB | 51.52 MiB | 0.267 s | 0 |
+| 128 MiB | 51.12 MiB | 0.270 s | 0 |
+
+回环测试中 32 路合计传输 256 MiB，吞吐约 957/949 MiB/s。这只是本机回环负载发生器的结果，不能推出公网用户网速不受影响；默认 32 KiB socket 缓冲在高 RTT 链路上可能降低单连接吞吐。上述 cgroup 不包含系统、其他服务、TLS/REALITY 或长时慢客户端；64 MiB 整机仍可能 OOM，生产优先 128 MiB。
+
+## v0.1.0 测试对象
 
 - 主面板源码基线：AngeloSakura/Angelo-xui-plugin-2 `bb0bf320301fb03d1975ff1489e36f13324f15d7`。
 - 原版 Xray：v26.10.31，安装包由上游 SHA256 验证；未修改源码、未重编译 Xray。
@@ -35,7 +50,7 @@
 
 2026-11-07，Windows amd64，Go 1.26.10：`XRAY_BINARY=<官方xray.exe> go test ./... -count=1` 与 `go vet ./...` PASS。真实请求实际经过原版 VLESS 服务，再检查额度停用、重置和重启后的累计流量。最初 AdGuard 影响 stats 通信；关闭后发现新版核心默认屏蔽回环目标，测试 fixture 为自身本地 HTTP 服务增加精确目的地址/端口 allow 规则，默认安装未改变这项行为。
 
-## Linux 发布门槛
+## v0.1.0 Linux 发布门槛
 
 [发布前完整 CI 42381437890](https://github.com/AngeloSakura/angelo-nat-node/actions/runs/42381437890)，代码提交 `fd1e007312d600ff1d3e1c39aa36c58db1fff3a3`：**verify / master-node-live / master-live 全部 PASS**。后续文档提交未改变程序、测试或打包脚本。
 
