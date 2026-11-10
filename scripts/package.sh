@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-version=${VERSION:-v0.1.8}
+version=${VERSION:-v0.1.9}
 mkdir -p dist
 for target in amd64 arm64 386 armv7; do
  arch=$target

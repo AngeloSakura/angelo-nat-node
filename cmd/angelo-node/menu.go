@@ -7,9 +7,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	pathpkg "path"
 	"os"
 	"os/exec"
+	pathpkg "path"
 	"strconv"
 	"strings"
 
@@ -34,6 +34,7 @@ func runInteractiveMenu(configPath string) error {
 		fmt.Println("6. 健康检查")
 		fmt.Println("7. 更新节点")
 		fmt.Println("8. 卸载节点")
+		fmt.Println("9. 切换 Xray 内核版本")
 		fmt.Println("0. 退出")
 		fmt.Print("请输入选项: ")
 
@@ -87,6 +88,10 @@ func runInteractiveMenu(configPath string) error {
 				fmt.Printf("卸载失败: %v\n", err)
 			} else if removed {
 				return nil
+			}
+		case "9":
+			if err = changeXrayVersion(reader, configPath); err != nil {
+				fmt.Printf("切换失败: %v\n", err)
 			}
 		case "0":
 			return nil

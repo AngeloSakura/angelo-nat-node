@@ -47,7 +47,11 @@ func run() error {
 	basePath := flag.String("base-path", "/", "initial API path suffix")
 	xray := flag.String("xray", "/usr/local/lib/angelo-node/xray", "initial original Xray path")
 	stateDir := flag.String("state-dir", "/var/lib/angelo-node", "initial persistent state directory")
+	switchVersion := flag.String("switch-xray", "", "switch to a listed official Xray release")
 	flag.Parse()
+	if *switchVersion != "" {
+		return switchXray(*configPath, *switchVersion)
+	}
 	if len(os.Args) == 1 {
 		return runInteractiveMenu(*configPath)
 	}

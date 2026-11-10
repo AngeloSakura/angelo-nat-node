@@ -60,11 +60,11 @@ curl -fsSL https://github.com/AngeloSakura/angelo-nat-node/releases/latest/downl
 节点升级只替换管理程序，备份原程序、指定的 config.json 和整个状态目录，保留 Token、证书、GUID、用户、计数以及原版 Xray。证书文件及其他外部配置需另行备份：
 
 ```bash
-angelo-node-update v0.1.8
+angelo-node-update v0.1.9
 /usr/local/bin/x-ui -health-check
 ```
 
-必须填写固定版本；不会自动追踪 latest。新版本启动失败会尝试恢复旧可执行文件，**不回灌旧计数覆盖新计数**。旧程序无法读取新 schema 时保留备份并停机等待恢复，不宣称成功。自定义路径参数见 `angelo-node-update --help`。
+也可运行 `angelo-node-update latest`，或在 `x-ui` 控制台选择「7. 更新节点」获取最新节点程序。新版本启动失败会尝试恢复旧可执行文件，**不回灌旧计数覆盖新计数**。旧程序无法读取新 schema 时保留备份并停机等待恢复，不宣称成功。自定义路径参数见 `angelo-node-update --help`。
 
 主面板在主面板机器使用单独的 [主面板升级脚本和恢复说明](docs/MASTER-UPDATE.md)。它只替换原主面板可执行文件，不覆盖 SQLite、用户、密钥、设置或 Xray，不调用节点升级。主面板新二进制可能自行迁移数据库，因此必须保留升级前备份；迁移后失败不盲目回滚数据库。
 
@@ -92,6 +92,14 @@ sudo /usr/local/bin/x-ui -health-check  # 验证当前 Xray stats 响应和节�
 修改配置需重启服务。修改 `stateDir` 时还需同步 systemd 的 `ReadWritePaths` 并迁移完整状态目录，不能把空目录当成更新。不要删除 state.json 来修复启动错误，否则会失去节点身份和累计计数。
 
 `directOutboundSettings` 是可选的原版 Xray freedom 出站设置，默认不覆盖原版行为。测试仅使用精确回环地址/端口 allow 规则连接本机测试服务；默认安装不开放私网目的地址。其他路由、geodata、DNS、多出站自定义暂不提供面板同步。
+
+## 在控制台切换 Xray 版本
+
+运行 `sudo x-ui`，选择 **9. 切换 Xray 内核版本**。程序实时读取 XTLS 官方 Releases，与当前 Angelo 3x-ui 使用相同来源和最低版本规则（v26.6.27），只列出有本机 Linux 架构资产的版本。输入列表序号即可选择，`0` 返回；无需填写版本号。列表标记当前版本和预发布版本。
+
+确认后先下载并验证官方 SHA256，再停止服务，以所选内核校验现有配置并替换。服务健康检查失败会尝试恢复旧内核及原运行状态；原本停止的服务不会自动启动。旧可执行文件备份路径会打印出来。不会恢复旧状态快照或覆盖用户、Token、配置、GUID 和累计流量。
+
+切换会中断现有连接。可以选择较早的兼容版本解决客户端兼容问题；本功能不修改客户端配置，也不保证任何特定版本与所有客户端兼容。获取列表或下载失败时保持原内核运行。版本列表来自 GitHub 的默认一页结果，与面板一致，不是完整历史档案。
 
 ## 支持边界
 
