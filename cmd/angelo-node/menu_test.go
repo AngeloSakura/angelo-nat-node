@@ -15,7 +15,7 @@ func TestNormalizeMenuBasePath(t *testing.T) {
 		want  string
 	}{
 		{input: "/", want: "/"},
-		{input: "sakura", want: "/sakura/"},
+		{input: "node-path", want: "/node-path/"},
 		{input: "/panel", want: "/panel/"},
 		{input: "/panel/", want: "/panel/"},
 		{input: "/api/v1", want: "/api/v1/"},
@@ -38,7 +38,7 @@ func TestNormalizeMenuBasePathRejectsInvalidValue(t *testing.T) {
 
 func TestInitConfigPersistsNormalizedBasePath(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.json")
-	if err := initConfig(configPath, ":20001", "sakura", "/usr/local/lib/angelo-node/xray", t.TempDir()); err != nil {
+	if err := initConfig(configPath, ":20001", "node-path", "/usr/local/lib/angelo-node/xray", t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(configPath)
@@ -49,8 +49,8 @@ func TestInitConfigPersistsNormalizedBasePath(t *testing.T) {
 	if err = json.Unmarshal(data, &cfg); err != nil {
 		t.Fatal(err)
 	}
-	if cfg.BasePath != "/sakura/" {
-		t.Fatalf("saved basePath = %q; want %q", cfg.BasePath, "/sakura/")
+	if cfg.BasePath != "/node-path/" {
+		t.Fatalf("saved basePath = %q; want %q", cfg.BasePath, "/node-path/")
 	}
 	if cfg.Listen != ":20001" {
 		t.Fatalf("saved listen = %q; want %q", cfg.Listen, ":20001")

@@ -152,7 +152,7 @@ func changeMenuBasePath(reader *bufio.Reader, path string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("请输入访问路径（例如 /panel，当前 %s）: ", cfg.BasePath)
+	fmt.Printf("请输入路径名（无需输入 /，例如 node-path；当前 %s）: ", cfg.BasePath)
 	value, err := readMenuLine(reader)
 	if err != nil {
 		return err

@@ -60,7 +60,7 @@ curl -fsSL https://github.com/AngeloSakura/angelo-nat-node/releases/latest/downl
 节点升级只替换管理程序，备份原程序、指定的 config.json 和整个状态目录，保留 Token、证书、GUID、用户、计数以及原版 Xray。证书文件及其他外部配置需另行备份：
 
 ```bash
-angelo-node-update v0.1.7
+angelo-node-update v0.1.8
 /usr/local/bin/x-ui -health-check
 ```
 

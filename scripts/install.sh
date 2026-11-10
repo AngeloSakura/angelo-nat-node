@@ -3,7 +3,7 @@ set -eu
 umask 077
 fail() { printf '%s\n' "ERROR: $*" >&2; exit 1; }
 repo=AngeloSakura/angelo-nat-node
-version=${1:-v0.1.7}
+version=${1:-v0.1.8}
 [ "$#" -le 1 ] || fail 'Usage: install.sh vX.Y.Z'
 case "$version" in v[0-9]*.[0-9]*.[0-9]*) ;; *) fail 'Usage: install.sh vX.Y.Z';; esac
 case "$version" in *[!a-zA-Z0-9._-]*) fail 'Invalid release tag';; esac
@@ -93,9 +93,9 @@ done
 listen=${ANGELO_LISTEN:-:$port}
 base_path=${ANGELO_BASE_PATH:-}
 while :; do
- if [ -z "$base_path" ]; then base_path=$(prompt_tty / '访问路径（例如 /panel）'); fi
+ if [ -z "$base_path" ]; then base_path=$(prompt_tty / '路径名（无需 /，例如 node-path）'); fi
  if normalize_base_path "$base_path" >/dev/null; then break; fi
- printf '%s\n' '访问路径无效，请重试（例如 /panel 或 sakura）。' >&2
+ printf '%s\n' '路径名无效，请重试（无需输入 /，例如 node-path）。' >&2
  base_path=
 done
 stage=$(mktemp -d "${TMPDIR:-/var/tmp}/angelo-install.XXXXXX")
