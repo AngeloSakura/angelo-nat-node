@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-version=${VERSION:-v0.1.4}
+version=${VERSION:-v0.1.5}
 mkdir -p dist
 for target in amd64 arm64 386 armv7; do
  arch=$target
@@ -14,5 +14,5 @@ for target in amd64 arm64 386 armv7; do
  tar -czf "dist/angelo-node-linux-$target.tar.gz" -C "$stage" x-ui update-node.sh angelo-node.service angelo-node.openrc LICENSE
  rm -rf -- "$stage"
 done
-cp scripts/install.sh scripts/update-master.sh scripts/migrate-v0.1.0.sh dist/
-(cd dist;sha256sum *.tar.gz install.sh update-master.sh migrate-v0.1.0.sh > SHA256SUMS)
+cp scripts/install.sh scripts/update-node.sh scripts/update-master.sh scripts/migrate-v0.1.0.sh dist/
+(cd dist;sha256sum *.tar.gz install.sh update-node.sh update-master.sh migrate-v0.1.0.sh > SHA256SUMS)
