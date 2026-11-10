@@ -61,7 +61,7 @@ curl -fsSL https://github.com/AngeloSakura/angelo-nat-node/releases/latest/downl
 节点升级只替换管理程序，备份原程序、指定的 config.json 和整个状态目录，保留 Token、证书、GUID、用户、计数以及原版 Xray。证书文件及其他外部配置需另行备份：
 
 ```bash
-angelo-node-update v0.1.2
+angelo-node-update v0.1.3
 /usr/local/bin/x-ui -health-check
 ```
 
@@ -123,3 +123,5 @@ sudo bash scripts/test-master-node-live.sh "$PWD/dist/angelo-node-linux-amd64"
 编译在有足够内存的开发机/CI 上完成。GitHub Actions 同时校验协议、原版 Xray、更新保留、跨架构打包与内存约束；测试管线启用 pipefail，失败不能被 tee 掩盖。详见 [协议说明](docs/PROTOCOL.md)、[需求](SPEC.md)、[验证记录](docs/VALIDATION.md)。
 
 GPL-3.0。Xray 不随节点包打入，安装时的原版 Xray 保持其上游许可；本项目与上游 3x-ui/Xray 独立。
+
+安装时会询问 API 端口和访问路径，默认分别为 2053 和根路径。账号密码不参与认证，节点只使用自动生成的 Bearer Token；安装完成后直接输入 x-ui 可进入管理菜单，查看连接信息、修改端口或路径、重置 Token、重启服务和执行健康检查。无终端输入时使用默认值，也可通过 ANGELO_PORT、ANGELO_LISTEN、ANGELO_BASE_PATH 预先指定。

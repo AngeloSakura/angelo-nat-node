@@ -3,15 +3,34 @@ set -eu
 umask 077
 fail() { printf '%s\n' "ERROR: $*" >&2; exit 1; }
 repo=AngeloSakura/angelo-nat-node
-version=${1:-v0.1.2}
+version=${1:-v0.1.3}
 [ "$#" -le 1 ] || fail 'Usage: install.sh vX.Y.Z'
 case "$version" in v[0-9]*.[0-9]*.[0-9]*) ;; *) fail 'Usage: install.sh vX.Y.Z';; esac
 case "$version" in *[!a-zA-Z0-9._-]*) fail 'Invalid release tag';; esac
 [ "$(uname -s)" = Linux ] || fail 'Linux required'
 [ "$(id -u)" = 0 ] || fail 'Run as root'
-for tool in curl tar sha256sum install flock mktemp awk date; do
- command -v "$tool" >/dev/null 2>&1 || fail "Missing: $tool"
-done
+install_missing_packages() {
+ missing=0
+ for tool in curl tar sha256sum install flock mktemp awk date unzip; do
+  command -v "$tool" >/dev/null 2>&1 || missing=1
+ done
+ if [ "$missing" = 0 ]; then return 0; fi
+ if command -v apk >/dev/null 2>&1; then
+  apk add --no-cache curl tar coreutils util-linux unzip
+ elif command -v apt-get >/dev/null 2>&1; then
+  apt-get update
+  DEBIAN_FRONTEND=noninteractive apt-get install -y curl tar coreutils util-linux unzip
+ else
+  fail 'Missing required packages and no supported package manager was found'
+ fi
+ for tool in curl tar sha256sum install flock mktemp awk date unzip; do
+  command -v "$tool" >/dev/null 2>&1 || fail "Missing: $tool"
+ done
+}
+install_missing_packages
+if ! command -v systemctl >/dev/null 2>&1 && ! command -v rc-service >/dev/null 2>&1 && command -v apk >/dev/null 2>&1; then
+ apk add --no-cache openrc
+fi
 if command -v systemctl >/dev/null 2>&1; then
  service_backend=systemd
  service=angelo-node.service
@@ -34,6 +53,34 @@ updater=/usr/local/bin/angelo-node-update
 unit=$service_path
 lock=/run/lock/angelo-node-install.lock
 startup_timeout=30
+prompt_tty() {
+ default=$1
+ label=$2
+ answer=
+ if [ -r /dev/tty ]; then
+  printf '%s [%s]: ' "$label" "$default" >/dev/tty
+  IFS= read -r answer </dev/tty || answer=
+ fi
+ [ -n "$answer" ] || answer=$default
+ printf '%s' "$answer"
+}
+validate_port() {
+ case "$1" in ''|*[!0-9]*) return 1;; esac
+ [ "$1" -ge 1 ] && [ "$1" -le 65535 ]
+}
+normalize_base_path() {
+ value=$1
+ case "$value" in
+  /) printf '/';;
+  /*)
+   case "$value" in *[[:space:]]*) return 1;; esac
+   value=$(printf '%s' "$value" | sed 's#^/*##; s#/*$##')
+   [ -n "$value" ] || printf '/'
+   [ -n "$value" ] && printf '/%s/' "$value"
+   ;;
+  *) return 1;;
+ esac
+}
 exec 9>"$lock"
 flock -n 9 || fail 'Another node installation is running'
 # Refuse complete and partial installations, including dangling symlinks.
@@ -42,6 +89,13 @@ for path in "$config_dir" "$state_dir" "$library_dir" "$binary" "$updater" "$uni
  [ ! -e "$path" ] && [ ! -L "$path" ] || fail 'Existing node files found. Use angelo-node-update for updates; configuration and users will not be overwritten.'
 done
 case "$(uname -m)" in x86_64) arch=amd64;; aarch64|arm64) arch=arm64;; i?86) arch=386;; armv7l) arch=armv7;; *) fail 'Unsupported architecture';; esac
+port=${ANGELO_PORT:-}
+if [ -z "$port" ]; then port=$(prompt_tty 2053 'API 端口'); fi
+validate_port "$port" || fail 'API port must be 1-65535'
+listen=${ANGELO_LISTEN:-:$port}
+base_path=${ANGELO_BASE_PATH:-}
+if [ -z "$base_path" ]; then base_path=$(prompt_tty / '访问路径（例如 /panel）'); fi
+base_path=$(normalize_base_path "$base_path") || fail '访问路径必须以 / 开头且不能包含空格或换行'
 stage=$(mktemp -d "${TMPDIR:-/var/tmp}/angelo-install.XXXXXX")
 service_attempted=0
 completed=0
@@ -99,8 +153,8 @@ else
  esac
  curl -fL --retry 3 --connect-timeout 15 --max-filesize 67108864 "https://github.com/XTLS/Xray-core/releases/download/v26.10.31/$xasset" -o "$stage/xray.zip"
  printf '%s  %s\n' "$digest" "$stage/xray.zip" | sha256sum -c -
- unzip -Z1 "$stage/xray.zip" >"$stage/xray-members"
- awk '$0=="xray" {count++} END {if(count!=1) exit 1}' "$stage/xray-members" || fail 'Xray archive must contain exactly one xray executable'
+unzip -l "$stage/xray.zip" >"$stage/xray-members"
+awk '$NF=="xray" && $0 !~ /[\\\\/]/ {count++} END {if(count!=1) exit 1}' "$stage/xray-members" || fail 'Xray archive must contain exactly one xray executable'
  unzip -p "$stage/xray.zip" xray >"$stage/xray"
  [ -s "$stage/xray" ] || fail 'Xray executable is empty'
  chmod 755 "$stage/xray"
@@ -112,7 +166,7 @@ install -d -m 755 "$library_dir" "${binary%/*}"
 install -m 755 "$stage/x-ui" "$binary"
 install -m 755 "$stage/update-node.sh" "$updater"
 install -m 755 "$stage/xray" "$library_dir/xray"
-"$binary" -config "$config_dir/config.json" -init -listen "${ANGELO_LISTEN:-:2053}" -state-dir "$state_dir" -xray "$library_dir/xray"
+"$binary" -config "$config_dir/config.json" -init -listen "$listen" -base-path "$base_path" -state-dir "$state_dir" -xray "$library_dir/xray"
 if [ "$service_backend" = systemd ]; then
  install -m 644 "$stage/$service_member" "$unit"
  systemctl daemon-reload

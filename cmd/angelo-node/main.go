@@ -44,15 +44,19 @@ func run() error {
 	health := flag.Bool("health-check", false, "check authenticated local API and running Xray")
 	version := flag.Bool("version", false, "print version")
 	listen := flag.String("listen", ":2053", "initial API listen address")
+	basePath := flag.String("base-path", "/", "initial API path suffix")
 	xray := flag.String("xray", "/usr/local/lib/angelo-node/xray", "initial original Xray path")
 	stateDir := flag.String("state-dir", "/var/lib/angelo-node", "initial persistent state directory")
 	flag.Parse()
+	if len(os.Args) == 1 {
+		return runInteractiveMenu(*configPath)
+	}
 	if *version {
 		fmt.Println(node.Version)
 		return nil
 	}
 	if *initialize {
-		return initConfig(*configPath, *listen, *xray, *stateDir)
+		return initConfig(*configPath, *listen, *basePath, *xray, *stateDir)
 	}
 	b, err := os.ReadFile(*configPath)
 	if err != nil {
@@ -151,7 +155,7 @@ func run() error {
 		return err
 	}
 }
-func initConfig(path, listen, xray, stateDir string) error {
+func initConfig(path, listen, basePath, xray, stateDir string) error {
 	if _, err := os.Stat(path); err == nil {
 		return fmt.Errorf("config already exists; refusing to regenerate token or overwrite users")
 	} else if !os.IsNotExist(err) {
@@ -169,12 +173,12 @@ func initConfig(path, listen, xray, stateDir string) error {
 	if err := selfSigned(certPath, keyPath); err != nil {
 		return err
 	}
-	cfg := node.Config{Listen: listen, Token: hex.EncodeToString(secret), BasePath: "/", StateDir: stateDir, XrayPath: xray, APIAddress: "127.0.0.1:10085", TLSCert: certPath, TLSKey: keyPath, PollSeconds: 10, MaxClients: 64, MaxInbounds: 16, XrayMemoryLimit: "24MiB"}
+	cfg := node.Config{Listen: listen, Token: hex.EncodeToString(secret), BasePath: basePath, StateDir: stateDir, XrayPath: xray, APIAddress: "127.0.0.1:10085", TLSCert: certPath, TLSKey: keyPath, PollSeconds: 10, MaxClients: 64, MaxInbounds: 16, XrayMemoryLimit: "24MiB"}
 	b, _ := json.MarshalIndent(cfg, "", "  ")
 	if err := writeNew(path, b); err != nil {
 		return err
 	}
-	fmt.Printf("Created %s. Run angelo-node -show to display connection settings.\n", path)
+	fmt.Printf("Created %s. Run x-ui -show to display connection settings.\n", path)
 	return nil
 }
 func writeNew(path string, b []byte) error {
