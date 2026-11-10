@@ -21,7 +21,7 @@
 支持 systemd 或 OpenRC Linux：amd64、arm64、386、armv7；运行验证以 Linux amd64 为准，其他架构仅交叉编译。需要 root、`curl`、`tar`、`sha256sum`、`install`、`flock`；systemd 需要 `systemctl`，Alpine/OpenRC 需要 `rc-service` 和 `rc-update`；下载官方 Xray 时还需要 `unzip`。
 
 ```bash
-bash <(curl -fsSL https://github.com/AngeloSakura/angelo-nat-node/releases/latest/download/install.sh)
+curl -fsSL https://github.com/AngeloSakura/angelo-nat-node/releases/latest/download/install.sh | sh
 /usr/local/bin/x-ui -show
 ```
 
@@ -29,7 +29,7 @@ bash <(curl -fsSL https://github.com/AngeloSakura/angelo-nat-node/releases/lates
 
 ```bash
 sudo env XRAY_BINARY=/usr/local/x-ui/bin/xray-linux-amd64 \
-  ANGELO_LISTEN=:2053 bash <(curl -fsSL https://github.com/AngeloSakura/angelo-nat-node/releases/latest/download/install.sh)
+  curl -fsSL https://github.com/AngeloSakura/angelo-nat-node/releases/latest/download/install.sh | ANGELO_LISTEN=:2053 sh
 ```
 
 已有配置时安装器直接退出；**重复安装不是升级方法**。它不导入、不删除旧 x-ui 数据库，不停止旧 x-ui。旧面板和新节点不能同时占用相同 API/代理端口，请先保留旧配置、计划切换，并在新节点验证成功后手动停用旧节点面板。
@@ -39,7 +39,7 @@ sudo env XRAY_BINARY=/usr/local/x-ui/bin/xray-linux-amd64 \
 旧版管理进程仍叫 `angelo-node`，普通升级器只替换原路径，不能更名。已安装 v0.1.0 的机器使用一次性迁移器；它要求旧服务健康、目标 `/usr/local/bin/x-ui` 不存在，并在停机后备份旧程序、unit、配置和完整状态目录。失败时尝试恢复旧 unit 与程序；如果恢复失败，服务保持停止并保留备份，不回灌旧流量。
 
 ```bash
-bash <(curl -fsSL https://github.com/AngeloSakura/angelo-nat-node/releases/latest/download/migrate-v0.1.0.sh)
+curl -fsSL https://github.com/AngeloSakura/angelo-nat-node/releases/latest/download/migrate-v0.1.0.sh | sh
 /usr/local/bin/x-ui -health-check
 ```
 
