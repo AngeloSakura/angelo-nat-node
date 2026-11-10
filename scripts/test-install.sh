@@ -136,7 +136,7 @@ package_release() {
 }
 run_install() {
  local rc=0
- sh "$case_dir/installer.sh" v0.1.1 >"$case_dir/output" 2>&1 || rc=$?
+ sh "$case_dir/installer.sh" v0.1.2 >"$case_dir/output" 2>&1 || rc=$?
  if [[ $1 == success ]]; then [[ $rc == 0 ]] || fail "expected success, got $rc";
  else [[ $rc != 0 ]] || fail 'expected refusal/failure'; fi
  if grep -q private-secret-do-not-print "$case_dir/output"; then fail 'installer leaked token'; fi
