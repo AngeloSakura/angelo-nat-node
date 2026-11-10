@@ -56,12 +56,13 @@ startup_timeout=30
 prompt_tty() {
  default=$1
  label=$2
- answer=
- if [ -r /dev/tty ]; then
-  printf '%s [%s]: ' "$label" "$default" >/dev/tty
-  IFS= read -r answer </dev/tty || answer=
+ answer=$default
+ if { exec 3<>/dev/tty; } 2>/dev/null; then
+  printf '%s [%s]: ' "$label" "$default" >&3
+  IFS= read -r entered <&3 || entered=
+  exec 3>&-
+  [ -n "$entered" ] && answer=$entered
  fi
- [ -n "$answer" ] || answer=$default
  printf '%s' "$answer"
 }
 validate_port() {
