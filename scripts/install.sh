@@ -3,7 +3,7 @@ set -eu
 umask 077
 fail() { printf '%s\n' "ERROR: $*" >&2; exit 1; }
 repo=AngeloSakura/angelo-nat-node
-version=${1:-v0.1.5}
+version=${1:-v0.1.6}
 [ "$#" -le 1 ] || fail 'Usage: install.sh vX.Y.Z'
 case "$version" in v[0-9]*.[0-9]*.[0-9]*) ;; *) fail 'Usage: install.sh vX.Y.Z';; esac
 case "$version" in *[!a-zA-Z0-9._-]*) fail 'Invalid release tag';; esac
@@ -71,6 +71,11 @@ validate_port() {
 normalize_base_path() {
  value=$1
  case "$value" in
+  *[[:space:]]*) return 1;;
+  /*) ;;
+  *) value="/$value";;
+ esac
+ case "$value" in
   /) printf '/';;
   /*)
    case "$value" in *[[:space:]]*) return 1;; esac
@@ -90,12 +95,20 @@ for path in "$config_dir" "$state_dir" "$library_dir" "$binary" "$updater" "$uni
 done
 case "$(uname -m)" in x86_64) arch=amd64;; aarch64|arm64) arch=arm64;; i?86) arch=386;; armv7l) arch=armv7;; *) fail 'Unsupported architecture';; esac
 port=${ANGELO_PORT:-}
-if [ -z "$port" ]; then port=$(prompt_tty 2053 'API 端口'); fi
-validate_port "$port" || fail 'API port must be 1-65535'
+while :; do
+ if [ -z "$port" ]; then port=$(prompt_tty 2053 'API 端口'); fi
+ if validate_port "$port"; then break; fi
+ printf '%s\n' '端口无效，请输入 1-65535。' >&2
+ port=
+done
 listen=${ANGELO_LISTEN:-:$port}
 base_path=${ANGELO_BASE_PATH:-}
-if [ -z "$base_path" ]; then base_path=$(prompt_tty / '访问路径（例如 /panel）'); fi
-base_path=$(normalize_base_path "$base_path") || fail '访问路径必须以 / 开头且不能包含空格或换行'
+while :; do
+ if [ -z "$base_path" ]; then base_path=$(prompt_tty / '访问路径（例如 /panel）'); fi
+ if base_path=$(normalize_base_path "$base_path"); then break; fi
+ printf '%s\n' '访问路径无效，请重试（例如 /panel 或 sakura）。' >&2
+ base_path=
+done
 stage=$(mktemp -d "${TMPDIR:-/var/tmp}/angelo-install.XXXXXX")
 service_attempted=0
 completed=0
@@ -154,7 +167,9 @@ else
  curl -fL --retry 3 --connect-timeout 15 --max-filesize 67108864 "https://github.com/XTLS/Xray-core/releases/download/v26.10.31/$xasset" -o "$stage/xray.zip"
  printf '%s  %s\n' "$digest" "$stage/xray.zip" | sha256sum -c -
 unzip -l "$stage/xray.zip" >"$stage/xray-members"
-awk '$NF=="xray" && $0 !~ /\\// {count++} END {if(count!=1) exit 1}' "$stage/xray-members" || fail 'Xray archive must contain exactly one xray executable'
+xray_members=$(grep -E '[[:space:]]xray[[:space:]]*$' "$stage/xray-members" 2>/dev/null || true)
+xray_count=$(printf '%s\n' "$xray_members" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')
+[ "$xray_count" = 1 ] || fail 'Xray archive must contain exactly one xray executable'
  unzip -p "$stage/xray.zip" xray >"$stage/xray"
  [ -s "$stage/xray" ] || fail 'Xray executable is empty'
  chmod 755 "$stage/xray"
