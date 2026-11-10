@@ -28,4 +28,4 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             --title "$GITHUB_REF_NAME" \
             --generate-notes \
-            dist/*.tar.gz dist/install.sh dist/update-master.sh dist/migrate-v0.1.0.sh dist/SHA256SUMS
+            dist/*.tar.gz dist/install.sh dist/update-node.sh dist/update-master.sh dist/migrate-v0.1.0.sh dist/SHA256SUMS

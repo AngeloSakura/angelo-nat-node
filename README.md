@@ -22,7 +22,6 @@
 
 ```bash
 curl -fsSL https://github.com/AngeloSakura/angelo-nat-node/releases/latest/download/install.sh | sh
-/usr/local/bin/x-ui -show
 ```
 
 安装器校验版本包 SHA256。默认复用已安装的 Xray（复制字节，不改旧文件），找不到时下载固定官方 `v26.10.31` 并校验预设 SHA256。也可显式指定：
@@ -61,7 +60,7 @@ curl -fsSL https://github.com/AngeloSakura/angelo-nat-node/releases/latest/downl
 节点升级只替换管理程序，备份原程序、指定的 config.json 和整个状态目录，保留 Token、证书、GUID、用户、计数以及原版 Xray。证书文件及其他外部配置需另行备份：
 
 ```bash
-angelo-node-update v0.1.3
+angelo-node-update v0.1.4
 /usr/local/bin/x-ui -health-check
 ```
 
@@ -124,4 +123,4 @@ sudo bash scripts/test-master-node-live.sh "$PWD/dist/angelo-node-linux-amd64"
 
 GPL-3.0。Xray 不随节点包打入，安装时的原版 Xray 保持其上游许可；本项目与上游 3x-ui/Xray 独立。
 
-安装时会询问 API 端口和访问路径，默认分别为 2053 和根路径。账号密码不参与认证，节点只使用自动生成的 Bearer Token；安装完成后直接输入 x-ui 可进入管理菜单，查看连接信息、修改端口或路径、重置 Token、重启服务和执行健康检查。无终端输入时使用默认值，也可通过 ANGELO_PORT、ANGELO_LISTEN、ANGELO_BASE_PATH 预先指定。
+安装时会询问 API 端口和访问路径，默认分别为 2053 和根路径。账号密码不参与认证，节点只使用自动生成的 Bearer Token；安装完成后自动进入 x-ui 管理菜单。菜单可查看连接信息、修改端口或路径、重置 Token、重启服务、健康检查、安全更新和卸载。卸载输入 y 确认；无终端安装时使用默认端口和根路径。

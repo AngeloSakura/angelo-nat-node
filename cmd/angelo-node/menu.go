@@ -17,7 +17,12 @@ import (
 )
 
 func runInteractiveMenu(configPath string) error {
-	reader := bufio.NewReader(os.Stdin)
+	menuInput := os.Stdin
+	if tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0); err == nil {
+		defer tty.Close()
+		menuInput = tty
+	}
+	reader := bufio.NewReader(menuInput)
 	for {
 		fmt.Println()
 		fmt.Println("Angelo NAT Node")
@@ -27,6 +32,8 @@ func runInteractiveMenu(configPath string) error {
 		fmt.Println("4. 重置 API Token")
 		fmt.Println("5. 重启服务")
 		fmt.Println("6. 健康检查")
+		fmt.Println("7. 更新节点")
+		fmt.Println("8. 卸载节点")
 		fmt.Println("0. 退出")
 		fmt.Print("请输入选项: ")
 
@@ -65,6 +72,21 @@ func runInteractiveMenu(configPath string) error {
 			}
 			if err = healthCheck(cfg); err != nil {
 				fmt.Printf("健康检查失败: %v\n", err)
+			}
+		case "7":
+			if err = updateNode(); err != nil {
+				fmt.Printf("更新失败: %v\n", err)
+			} else {
+				fmt.Println("更新完成，旧菜单已退出；重新输入 x-ui 可再次打开菜单。")
+				return nil
+			}
+		case "8":
+			var removed bool
+			removed, err = uninstallNode(reader)
+			if err != nil {
+				fmt.Printf("卸载失败: %v\n", err)
+			} else if removed {
+				return nil
 			}
 		case "0":
 			return nil
@@ -144,17 +166,17 @@ func changeMenuBasePath(reader *bufio.Reader, path string) error {
 }
 
 func normalizeMenuBasePath(value string) (string, error) {
-	if strings.ContainsAny(value, "\r\n\x00") || strings.IndexFunc(value, func(r rune) bool {
-		return r == ' ' || r == '\t'
-	}) >= 0 {
-		return "", fmt.Errorf("访问路径包含非法字符")
-	}
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return "", fmt.Errorf("访问路径不能为空")
 	}
 	if !strings.HasPrefix(value, "/") {
 		return "", fmt.Errorf("访问路径必须以 / 开头")
+	}
+	if strings.ContainsAny(value, "\r\n\x00") || strings.IndexFunc(value, func(r rune) bool {
+		return r == ' ' || r == '\t'
+	}) >= 0 {
+		return "", fmt.Errorf("访问路径包含非法字符")
 	}
 	if value == "/" {
 		return value, nil
@@ -229,6 +251,65 @@ func restartNodeService() error {
 	}
 	if _, err := exec.LookPath("rc-service"); err == nil {
 		return exec.Command("rc-service", "angelo-node", "restart").Run()
+	}
+	return fmt.Errorf("未找到 systemctl 或 rc-service")
+}
+
+func updateNode() error {
+	if os.Geteuid() != 0 {
+		return fmt.Errorf("更新需要 root 权限")
+	}
+	fmt.Println("正在检查最新版本并安全更新节点...")
+	cmd := exec.Command("/usr/local/bin/angelo-node-update", "latest")
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+func uninstallNode(reader *bufio.Reader) (bool, error) {
+	if os.Geteuid() != 0 {
+		return false, fmt.Errorf("卸载需要 root 权限")
+	}
+	fmt.Print("确认删除节点配置、Token、证书和数据？输入 y 继续: ")
+	confirm, err := readMenuLine(reader)
+	if err != nil {
+		return false, err
+	}
+	if strings.ToLower(confirm) != "y" {
+		fmt.Println("已取消卸载。")
+		return false, nil
+	}
+	if err = stopAndDisableNodeService(); err != nil {
+		return false, err
+	}
+	for _, path := range []string{
+		"/usr/local/bin/x-ui",
+		"/usr/local/bin/angelo-node-update",
+		"/usr/local/lib/angelo-node",
+		"/etc/angelo-node",
+		"/var/lib/angelo-node",
+		"/var/backups/angelo-node",
+		"/etc/systemd/system/angelo-node.service",
+		"/etc/init.d/angelo-node",
+	} {
+		if err = os.RemoveAll(path); err != nil {
+			return false, err
+		}
+	}
+	fmt.Println("节点已卸载，配置、Token、证书、状态和 Xray 已删除。")
+	return true, nil
+}
+
+func stopAndDisableNodeService() error {
+	if _, err := exec.LookPath("systemctl"); err == nil {
+		_ = exec.Command("systemctl", "disable", "--now", "angelo-node.service").Run()
+		return exec.Command("systemctl", "daemon-reload").Run()
+	}
+	if _, err := exec.LookPath("rc-service"); err == nil {
+		_ = exec.Command("rc-service", "angelo-node", "stop").Run()
+		_ = exec.Command("rc-update", "del", "angelo-node", "default").Run()
+		return nil
 	}
 	return fmt.Errorf("未找到 systemctl 或 rc-service")
 }

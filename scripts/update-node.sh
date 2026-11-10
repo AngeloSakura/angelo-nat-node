@@ -15,7 +15,16 @@ USAGE
 }
 fail() { printf '%s\n' "ERROR: $*" >&2; exit 1; }
 version=${1:-}
-case "$version" in --help|-h) usage;exit 0;; v[0-9]*.[0-9]*.[0-9]*) shift;; *) usage >&2;exit 1;; esac
+case "$version" in
+ --help|-h) usage;exit 0;;
+ latest) shift;;
+ v[0-9]*.[0-9]*.[0-9]*) shift;;
+ *) usage >&2;exit 1;;
+esac
+if [ "$version" = latest ]; then
+ latest_url=$(curl -fLsS --proto '=https' --proto-redir '=https' --connect-timeout 15 --max-time 60 -o /dev/null -w '%{url_effective}' https://github.com/AngeloSakura/angelo-nat-node/releases/latest/download/SHA256SUMS) || fail 'Cannot resolve latest release'
+ case "$latest_url" in */download/v[0-9]*.[0-9]*.[0-9]*/SHA256SUMS) version=${latest_url##*/download/}; version=${version%%/*};; *) fail 'Latest release URL has an unexpected format';; esac
+fi
 case "$version" in *[!a-zA-Z0-9._-]*) fail 'Invalid release tag';; esac
 config=/etc/angelo-node/config.json
 binary=/usr/local/bin/x-ui

@@ -3,7 +3,7 @@ set -eu
 umask 077
 fail() { printf '%s\n' "ERROR: $*" >&2; exit 1; }
 repo=AngeloSakura/angelo-nat-node
-version=${1:-v0.1.3}
+version=${1:-v0.1.4}
 [ "$#" -le 1 ] || fail 'Usage: install.sh vX.Y.Z'
 case "$version" in v[0-9]*.[0-9]*.[0-9]*) ;; *) fail 'Usage: install.sh vX.Y.Z';; esac
 case "$version" in *[!a-zA-Z0-9._-]*) fail 'Invalid release tag';; esac
@@ -189,4 +189,7 @@ while :; do
  sleep 1
 done
 completed=1
-printf '%s\n' 'Installed. Use /usr/local/bin/x-ui -show to display the token. Map this API port through NAT and pin the certificate in the master.'
+printf '%s\n' 'Installed. The x-ui management menu is opening; use its connection details to configure the master.'
+if (tty -s </dev/tty) >/dev/null 2>&1; then
+ exec "$binary"
+fi
