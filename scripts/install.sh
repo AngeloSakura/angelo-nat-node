@@ -57,10 +57,9 @@ prompt_tty() {
  default=$1
  label=$2
  answer=$default
- if { exec 3<>/dev/tty; } 2>/dev/null; then
-  printf '%s [%s]: ' "$label" "$default" >&3
-  IFS= read -r entered <&3 || entered=
-  exec 3>&-
+ if (tty -s </dev/tty) >/dev/null 2>&1; then
+  printf '%s [%s]: ' "$label" "$default" >/dev/tty
+  IFS= read -r entered </dev/tty || entered=
   [ -n "$entered" ] && answer=$entered
  fi
  printf '%s' "$answer"
