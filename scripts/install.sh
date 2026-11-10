@@ -154,7 +154,7 @@ else
  curl -fL --retry 3 --connect-timeout 15 --max-filesize 67108864 "https://github.com/XTLS/Xray-core/releases/download/v26.10.31/$xasset" -o "$stage/xray.zip"
  printf '%s  %s\n' "$digest" "$stage/xray.zip" | sha256sum -c -
 unzip -l "$stage/xray.zip" >"$stage/xray-members"
-awk '$NF=="xray" && $0 !~ /[\\\\/]/ {count++} END {if(count!=1) exit 1}' "$stage/xray-members" || fail 'Xray archive must contain exactly one xray executable'
+awk '$NF=="xray" && $0 !~ /\\// {count++} END {if(count!=1) exit 1}' "$stage/xray-members" || fail 'Xray archive must contain exactly one xray executable'
  unzip -p "$stage/xray.zip" xray >"$stage/xray"
  [ -s "$stage/xray" ] || fail 'Xray executable is empty'
  chmod 755 "$stage/xray"
