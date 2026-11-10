@@ -3,7 +3,7 @@ set -eu
 umask 077
 fail() { printf '%s\n' "ERROR: $*" >&2; exit 1; }
 repo=AngeloSakura/angelo-nat-node
-version=${1:-v0.1.6}
+version=${1:-v0.1.7}
 [ "$#" -le 1 ] || fail 'Usage: install.sh vX.Y.Z'
 case "$version" in v[0-9]*.[0-9]*.[0-9]*) ;; *) fail 'Usage: install.sh vX.Y.Z';; esac
 case "$version" in *[!a-zA-Z0-9._-]*) fail 'Invalid release tag';; esac
@@ -71,19 +71,8 @@ validate_port() {
 normalize_base_path() {
  value=$1
  case "$value" in
-  *[[:space:]]*) return 1;;
-  /*) ;;
-  *) value="/$value";;
- esac
- case "$value" in
-  /) printf '/';;
-  /*)
-   case "$value" in *[[:space:]]*) return 1;; esac
-   value=$(printf '%s' "$value" | sed 's#^/*##; s#/*$##')
-   [ -n "$value" ] || printf '/'
-   [ -n "$value" ] && printf '/%s/' "$value"
-   ;;
-  *) return 1;;
+  ''|*[[:space:]]*) return 1;;
+  *) printf '%s' "$value";;
  esac
 }
 exec 9>"$lock"
@@ -105,7 +94,7 @@ listen=${ANGELO_LISTEN:-:$port}
 base_path=${ANGELO_BASE_PATH:-}
 while :; do
  if [ -z "$base_path" ]; then base_path=$(prompt_tty / '访问路径（例如 /panel）'); fi
- if base_path=$(normalize_base_path "$base_path"); then break; fi
+ if normalize_base_path "$base_path" >/dev/null; then break; fi
  printf '%s\n' '访问路径无效，请重试（例如 /panel 或 sakura）。' >&2
  base_path=
 done

@@ -156,6 +156,11 @@ func run() error {
 	}
 }
 func initConfig(path, listen, basePath, xray, stateDir string) error {
+	normalizedBasePath, err := normalizeMenuBasePath(basePath)
+	if err != nil {
+		return fmt.Errorf("invalid API base path: %w", err)
+	}
+	basePath = normalizedBasePath
 	if _, err := os.Stat(path); err == nil {
 		return fmt.Errorf("config already exists; refusing to regenerate token or overwrite users")
 	} else if !os.IsNotExist(err) {
@@ -178,7 +183,7 @@ func initConfig(path, listen, basePath, xray, stateDir string) error {
 	if err := writeNew(path, b); err != nil {
 		return err
 	}
-	fmt.Printf("Created %s. Run x-ui -show to display connection settings.\n", path)
+	fmt.Printf("Created %s. API listen: %s. API base path: %s.\n", path, cfg.Listen, cfg.BasePath)
 	return nil
 }
 func writeNew(path string, b []byte) error {

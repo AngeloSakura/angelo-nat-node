@@ -47,7 +47,7 @@ curl -fsSL https://github.com/AngeloSakura/angelo-nat-node/releases/latest/downl
 ## 主面板连接 NAT 节点
 
 1. 在 NAT 提供商控制台配置 TCP 映射：一个用于管理 API，另一个或多个用于实际代理入站。入站监听的是 VPS 内部端口，客户端使用映射后的外部端口；需要 UDP 的协议另配 UDP 映射。
-2. 节点运行 `sudo /usr/local/bin/x-ui -show`，读取 API Token 和 TLS SHA256 指纹。Token 是完整管理权限密钥，不要公开。
+2. 节点运行 `sudo /usr/local/bin/x-ui -show`，读取 API Token 和 TLS SHA256 指纹。Token 是完整管理权限密钥，不要公开；TLS 指纹用于主面板 pin 模式校验证书，防止连错节点。
 3. 已有 Angelo 主面板的节点管理中添加节点：协议 `https`，地址填 NAT 公网 IP/域名，端口填 API **外部映射端口**，basePath `/`，填节点 Token。
 4. TLS 验证选 `pin`，`pinnedCertSha256` 填本机输出的指纹。自签名证书默认不匹配公网域名，使用明确指纹绑定；不要长期选择跳过验证。确实通过可信内网连接时，按主面板要求开启私网地址许可。
 5. 先测试连接，再在主面板创建/同步入站和客户端。节点 `GUID` 首次创建后持久保存；升级时不变化。
@@ -60,7 +60,7 @@ curl -fsSL https://github.com/AngeloSakura/angelo-nat-node/releases/latest/downl
 节点升级只替换管理程序，备份原程序、指定的 config.json 和整个状态目录，保留 Token、证书、GUID、用户、计数以及原版 Xray。证书文件及其他外部配置需另行备份：
 
 ```bash
-angelo-node-update v0.1.6
+angelo-node-update v0.1.7
 /usr/local/bin/x-ui -health-check
 ```
 

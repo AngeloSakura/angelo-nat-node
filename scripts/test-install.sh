@@ -34,13 +34,13 @@ XRAY
  cat >"$case_dir/package/x-ui" <<'NODE'
 #!/bin/sh
 set -eu
-version=v0.1.6
-mode= config= state= xray= listen=
+version=v0.1.7
+mode= config= state= xray= listen= base_path=
 while [ "$#" -gt 0 ]; do
  case "$1" in
   -version|-init|-health-check) mode=$1;shift;;
   -config) config=$2;shift 2;;
-  -base-path) shift 2;;
+  -base-path) base_path=$2;shift 2;;
   -state-dir) state=$2;shift 2;;
   -xray) xray=$2;shift 2;;
   -listen) listen=$2;shift 2;;
@@ -52,8 +52,11 @@ case "$mode" in
  -init)
   [ ! -e "$config" ] && [ ! -L "$config" ] || exit 51
   [ -x "$xray" ] || exit 52
+  case "$base_path" in /*) ;; *) base_path="/$base_path";; esac
+  base_path="/$(printf '%s' "$base_path" | sed 's#^/*##; s#/*$##')/"
+  [ "$base_path" = "//" ] && base_path=/
   set -C
-  printf '{"stateDir":"%s","xrayPath":"%s","listen":"%s","token":"private-secret-do-not-print"}\n' "$state" "$xray" "$listen" >"$config"
+  printf '{"stateDir":"%s","xrayPath":"%s","listen":"%s","basePath":"%s","token":"private-secret-do-not-print"}\n' "$state" "$xray" "$listen" "$base_path" >"$config"
   printf 'private TLS key\n' >"${config%/*}/tls.key"
   printf 'public TLS certificate\n' >"${config%/*}/tls.crt"
   ;;
@@ -86,8 +89,8 @@ while [ "$#" -gt 0 ]; do
 done
 printf '%s\n' "$url" >>"$TEST_CASE/network-log"
 case "$url" in
- https://github.com/AngeloSakura/angelo-nat-node/releases/download/v0.1.6/SHA256SUMS) cp "$TEST_CASE/releases/SHA256SUMS" "$out";;
- https://github.com/AngeloSakura/angelo-nat-node/releases/download/v0.1.6/angelo-node-linux-amd64.tar.gz) cp "$TEST_CASE/releases/angelo-node-linux-amd64.tar.gz" "$out";;
+ https://github.com/AngeloSakura/angelo-nat-node/releases/download/v0.1.7/SHA256SUMS) cp "$TEST_CASE/releases/SHA256SUMS" "$out";;
+ https://github.com/AngeloSakura/angelo-nat-node/releases/download/v0.1.7/angelo-node-linux-amd64.tar.gz) cp "$TEST_CASE/releases/angelo-node-linux-amd64.tar.gz" "$out";;
  https://github.com/XTLS/Xray-core/releases/download/v26.10.31/Xray-linux-64.zip) printf 'tampered upstream asset\n' >"$out";;
  *) exit 60;;
 esac
@@ -137,7 +140,7 @@ package_release() {
 }
 run_install() {
  local rc=0
- sh "$case_dir/installer.sh" v0.1.6 >"$case_dir/output" 2>&1 || rc=$?
+ ANGELO_BASE_PATH=sakura sh "$case_dir/installer.sh" v0.1.7 >"$case_dir/output" 2>&1 || rc=$?
  if [[ $1 == success ]]; then [[ $rc == 0 ]] || fail "expected success, got $rc";
  else [[ $rc != 0 ]] || fail 'expected refusal/failure'; fi
  if grep -q private-secret-do-not-print "$case_dir/output"; then fail 'installer leaked token'; fi
@@ -152,6 +155,7 @@ create_case fresh
 run_install success
 assert_same "$case_dir/original-xui/bin/xray-linux-amd64" "$case_dir/destination/usr/local/lib/angelo-node/xray"
 assert_same "$case_dir/package/x-ui" "$case_dir/destination/usr/local/bin/x-ui"
+grep -q '"basePath":"/sakura/"' "$case_dir/destination/etc/angelo-node/config.json" || fail 'installer did not persist normalized custom base path'
 grep -q '^ExecStart=/usr/local/bin/x-ui ' "$case_dir/destination/etc/systemd/system/angelo-node.service" || fail 'installed unit does not run x-ui executable'
 [[ -s $case_dir/health-log ]] || fail 'authenticated API/Xray health was not checked'
 [[ $(cat "$case_dir/service-status") == active ]] || fail 'new service inactive'
@@ -201,7 +205,7 @@ assert_no_install
 printf 'PASS duplicate checksum record is rejected\n'
 
 create_case wrong-version
-sed -i 's/version=v0.1.6/version=v0.0.9/' "$case_dir/package/x-ui"
+sed -i 's/version=v0.1.7/version=v0.0.9/' "$case_dir/package/x-ui"
 package_release
 run_install failure
 assert_no_install

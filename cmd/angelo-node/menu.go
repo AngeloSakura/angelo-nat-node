@@ -122,7 +122,6 @@ func showMenuConfig(path string) error {
 		return err
 	}
 	fmt.Printf("Listen: %s\nBase path: %s\nAPI token: %s\nTLS certificate: %s\n", cfg.Listen, cfg.BasePath, cfg.Token, cfg.TLSCert)
-	fmt.Println("认证方式: Bearer Token（没有账号密码）")
 	return showFingerprint(cfg.TLSCert)
 }
 
@@ -176,7 +175,7 @@ func normalizeMenuBasePath(value string) (string, error) {
 		return "", fmt.Errorf("访问路径不能为空")
 	}
 	if !strings.HasPrefix(value, "/") {
-		return "", fmt.Errorf("访问路径必须以 / 开头")
+		value = "/" + value
 	}
 	if value == "/" {
 		return value, nil

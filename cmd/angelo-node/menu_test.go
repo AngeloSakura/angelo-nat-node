@@ -1,6 +1,13 @@
 package main
 
-import "testing"
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/AngeloSakura/angelo-nat-node/internal/node"
+)
 
 func TestNormalizeMenuBasePath(t *testing.T) {
 	tests := []struct {
@@ -8,6 +15,7 @@ func TestNormalizeMenuBasePath(t *testing.T) {
 		want  string
 	}{
 		{input: "/", want: "/"},
+		{input: "sakura", want: "/sakura/"},
 		{input: "/panel", want: "/panel/"},
 		{input: "/panel/", want: "/panel/"},
 		{input: "/api/v1", want: "/api/v1/"},
@@ -21,9 +29,30 @@ func TestNormalizeMenuBasePath(t *testing.T) {
 }
 
 func TestNormalizeMenuBasePathRejectsInvalidValue(t *testing.T) {
-	for _, input := range []string{"", "panel", "/panel path", "/panel\n"} {
+	for _, input := range []string{"", "/panel path", "/panel\n"} {
 		if _, err := normalizeMenuBasePath(input); err == nil {
 			t.Fatalf("normalizeMenuBasePath(%q) accepted invalid value", input)
 		}
+	}
+}
+
+func TestInitConfigPersistsNormalizedBasePath(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	if err := initConfig(configPath, ":20001", "sakura", "/usr/local/lib/angelo-node/xray", t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg node.Config
+	if err = json.Unmarshal(data, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.BasePath != "/sakura/" {
+		t.Fatalf("saved basePath = %q; want %q", cfg.BasePath, "/sakura/")
+	}
+	if cfg.Listen != ":20001" {
+		t.Fatalf("saved listen = %q; want %q", cfg.Listen, ":20001")
 	}
 }
