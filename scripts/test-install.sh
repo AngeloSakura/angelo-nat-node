@@ -34,7 +34,7 @@ XRAY
  cat >"$case_dir/package/x-ui" <<'NODE'
 #!/bin/sh
 set -eu
-version=v0.1.1
+version=v0.1.2
 mode= config= state= xray= listen=
 while [ "$#" -gt 0 ]; do
  case "$1" in
@@ -85,8 +85,8 @@ while [ "$#" -gt 0 ]; do
 done
 printf '%s\n' "$url" >>"$TEST_CASE/network-log"
 case "$url" in
- https://github.com/AngeloSakura/angelo-nat-node/releases/download/v0.1.1/SHA256SUMS) cp "$TEST_CASE/releases/SHA256SUMS" "$out";;
- https://github.com/AngeloSakura/angelo-nat-node/releases/download/v0.1.1/angelo-node-linux-amd64.tar.gz) cp "$TEST_CASE/releases/angelo-node-linux-amd64.tar.gz" "$out";;
+ https://github.com/AngeloSakura/angelo-nat-node/releases/download/v0.1.2/SHA256SUMS) cp "$TEST_CASE/releases/SHA256SUMS" "$out";;
+ https://github.com/AngeloSakura/angelo-nat-node/releases/download/v0.1.2/angelo-node-linux-amd64.tar.gz) cp "$TEST_CASE/releases/angelo-node-linux-amd64.tar.gz" "$out";;
  https://github.com/XTLS/Xray-core/releases/download/v26.10.31/Xray-linux-64.zip) printf 'tampered upstream asset\n' >"$out";;
  *) exit 60;;
 esac
@@ -200,7 +200,7 @@ assert_no_install
 printf 'PASS duplicate checksum record is rejected\n'
 
 create_case wrong-version
-sed -i 's/version=v0.1.1/version=v0.0.9/' "$case_dir/package/x-ui"
+sed -i 's/version=v0.1.2/version=v0.0.9/' "$case_dir/package/x-ui"
 package_release
 run_install failure
 assert_no_install

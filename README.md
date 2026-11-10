@@ -21,16 +21,15 @@
 支持 systemd 或 OpenRC Linux：amd64、arm64、386、armv7；运行验证以 Linux amd64 为准，其他架构仅交叉编译。需要 root、`curl`、`tar`、`sha256sum`、`install`、`flock`；systemd 需要 `systemctl`，Alpine/OpenRC 需要 `rc-service` 和 `rc-update`；下载官方 Xray 时还需要 `unzip`。
 
 ```bash
-curl -fL --retry 3 https://github.com/AngeloSakura/angelo-nat-node/releases/download/v0.1.1/install.sh -o /tmp/angelo-node-install.sh
-sudo sh /tmp/angelo-node-install.sh v0.1.1
-sudo /usr/local/bin/x-ui -show
+bash <(curl -fsSL https://github.com/AngeloSakura/angelo-nat-node/releases/latest/download/install.sh)
+/usr/local/bin/x-ui -show
 ```
 
 安装器校验版本包 SHA256。默认复用已安装的 Xray（复制字节，不改旧文件），找不到时下载固定官方 `v26.10.31` 并校验预设 SHA256。也可显式指定：
 
 ```bash
 sudo env XRAY_BINARY=/usr/local/x-ui/bin/xray-linux-amd64 \
-  ANGELO_LISTEN=:2053 sh /tmp/angelo-node-install.sh v0.1.1
+  ANGELO_LISTEN=:2053 bash <(curl -fsSL https://github.com/AngeloSakura/angelo-nat-node/releases/latest/download/install.sh)
 ```
 
 已有配置时安装器直接退出；**重复安装不是升级方法**。它不导入、不删除旧 x-ui 数据库，不停止旧 x-ui。旧面板和新节点不能同时占用相同 API/代理端口，请先保留旧配置、计划切换，并在新节点验证成功后手动停用旧节点面板。
@@ -40,9 +39,8 @@ sudo env XRAY_BINARY=/usr/local/x-ui/bin/xray-linux-amd64 \
 旧版管理进程仍叫 `angelo-node`，普通升级器只替换原路径，不能更名。已安装 v0.1.0 的机器使用一次性迁移器；它要求旧服务健康、目标 `/usr/local/bin/x-ui` 不存在，并在停机后备份旧程序、unit、配置和完整状态目录。失败时尝试恢复旧 unit 与程序；如果恢复失败，服务保持停止并保留备份，不回灌旧流量。
 
 ```bash
-curl -fL --retry 3 https://github.com/AngeloSakura/angelo-nat-node/releases/download/v0.1.1/migrate-v0.1.0.sh -o /tmp/angelo-migrate-name.sh
-sudo sh /tmp/angelo-migrate-name.sh
-sudo /usr/local/bin/x-ui -health-check
+bash <(curl -fsSL https://github.com/AngeloSakura/angelo-nat-node/releases/latest/download/migrate-v0.1.0.sh)
+/usr/local/bin/x-ui -health-check
 ```
 
 迁移后继续使用 `sudo angelo-node-update <固定版本>`。不要将新安装器直接运行在旧配置上；它会拒绝覆盖。
@@ -63,8 +61,8 @@ sudo /usr/local/bin/x-ui -health-check
 节点升级只替换管理程序，备份原程序、指定的 config.json 和整个状态目录，保留 Token、证书、GUID、用户、计数以及原版 Xray。证书文件及其他外部配置需另行备份：
 
 ```bash
-sudo angelo-node-update v0.1.1
-sudo /usr/local/bin/x-ui -health-check
+angelo-node-update v0.1.2
+/usr/local/bin/x-ui -health-check
 ```
 
 必须填写固定版本；不会自动追踪 latest。新版本启动失败会尝试恢复旧可执行文件，**不回灌旧计数覆盖新计数**。旧程序无法读取新 schema 时保留备份并停机等待恢复，不宣称成功。自定义路径参数见 `angelo-node-update --help`。
