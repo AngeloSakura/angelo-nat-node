@@ -166,17 +166,17 @@ func changeMenuBasePath(reader *bufio.Reader, path string) error {
 }
 
 func normalizeMenuBasePath(value string) (string, error) {
+	if strings.ContainsAny(value, "\r\n\x00") || strings.IndexFunc(value, func(r rune) bool {
+		return r == ' ' || r == '\t'
+	}) >= 0 {
+		return "", fmt.Errorf("访问路径包含非法字符")
+	}
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return "", fmt.Errorf("访问路径不能为空")
 	}
 	if !strings.HasPrefix(value, "/") {
 		return "", fmt.Errorf("访问路径必须以 / 开头")
-	}
-	if strings.ContainsAny(value, "\r\n\x00") || strings.IndexFunc(value, func(r rune) bool {
-		return r == ' ' || r == '\t'
-	}) >= 0 {
-		return "", fmt.Errorf("访问路径包含非法字符")
 	}
 	if value == "/" {
 		return value, nil
