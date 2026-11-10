@@ -65,6 +65,7 @@ jobs:
       - name: Shell syntax and master update preservation
         run: |
           for f in scripts/*.sh; do bash -n "$f"; done
+          sh -n scripts/angelo-node.openrc
           if [ -f scripts/test-update-master.sh ]; then bash scripts/test-update-master.sh; fi
           if [ -f scripts/test-update-node.sh ]; then sudo bash scripts/test-update-node.sh; fi
           bash scripts/test-install.sh
@@ -77,6 +78,7 @@ jobs:
           tar -xOzf dist/angelo-node-linux-amd64.tar.gz x-ui > /tmp/package-x-ui
           chmod 755 /tmp/package-x-ui
           test "$(/tmp/package-x-ui -version)" = v0.1.1
+          tar -tzf dist/angelo-node-linux-amd64.tar.gz | grep -Fx angelo-node.openrc
       - name: Test 64 and 128 MiB process cgroups
         run: sudo python3 scripts/memory-test.py dist/angelo-node-linux-amd64 /tmp/angelo-xray/xray | tee /tmp/memory-results.json
       - uses: actions/upload-artifact@v4

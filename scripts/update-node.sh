@@ -7,7 +7,7 @@ usage() {
 Usage: angelo-node-update vX.Y.Z [options]
   --config PATH          Existing config (default: /etc/angelo-node/config.json)
   --binary PATH          Existing node executable (default: /usr/local/bin/x-ui)
-  --service NAME         Existing systemd service (default: angelo-node.service)
+  --service NAME         Existing service (default: angelo-node.service or angelo-node on OpenRC)
   --backup-root PATH     Private backups (default: /var/backups/angelo-node)
   --startup-timeout N    Health deadline in seconds, 1-300 (default: 30)
 Use matching --config, --binary and --service when the installation is customized.
@@ -37,11 +37,21 @@ done
 case "$service" in ''|*[!a-zA-Z0-9_.@-]*|-*) fail 'Invalid service name';; esac
 case "$startup_timeout" in ''|*[!0-9]*) fail 'Invalid startup timeout';; esac
 [ "${#startup_timeout}" -le 3 ] && [ "$startup_timeout" -ge 1 ] && [ "$startup_timeout" -le 300 ] || fail 'Startup timeout must be 1-300 seconds'
-[ "$(uname -s)" = Linux ] || fail 'Linux/systemd required'
+[ "$(uname -s)" = Linux ] || fail 'Linux required'
 [ "$(id -u)" = 0 ] || fail 'Run as root'
-for tool in curl tar sha256sum systemctl install flock realpath mktemp cp mv awk date; do
+for tool in curl tar sha256sum install flock realpath mktemp cp mv awk date; do
  command -v "$tool" >/dev/null 2>&1 || fail "Missing $tool"
 done
+if command -v systemctl >/dev/null 2>&1; then
+ service_backend=systemd
+elif command -v rc-service >/dev/null 2>&1 && command -v rc-update >/dev/null 2>&1; then
+ service_backend=openrc
+ [ "$service" = angelo-node.service ] && service=angelo-node
+else
+ fail 'Missing: systemctl or OpenRC (rc-service and rc-update)'
+fi
+service_path=/etc/systemd/system/$service
+[ "$service_backend" = openrc ] && service_path=/etc/init.d/$service
 startup_timeout=$(awk -v value="$startup_timeout" 'BEGIN {print value + 0}')
 for path in "$config" "$binary" "$backup_root"; do
  case "$path" in /*) ;; *) fail 'Config, executable and backup paths must be absolute';; esac
@@ -74,18 +84,53 @@ atomic_binary() {
 wait_healthy() {
  deadline=$(( $(date +%s) + startup_timeout ))
  while :; do
-  if systemctl is-active --quiet "$service" && "$binary" -config "$config" -health-check >/dev/null 2>&1; then return 0; fi
+  if service_is_active && "$binary" -config "$config" -health-check >/dev/null 2>&1; then return 0; fi
   [ "$(date +%s)" -lt "$deadline" ] || return 1
   sleep 1
  done
+}
+service_is_active() {
+ if [ "$service_backend" = systemd ]; then
+  systemctl is-active --quiet "$service"
+ else
+  rc-service "$service" status >/dev/null 2>&1
+ fi
+}
+service_start() {
+ if [ "$service_backend" = systemd ]; then
+  systemctl start "$service"
+ else
+  rc-service "$service" start
+ fi
+}
+service_stop() {
+ if [ "$service_backend" = systemd ]; then
+  systemctl stop "$service" >/dev/null 2>&1
+ else
+  rc-service "$service" stop >/dev/null 2>&1
+ fi
+}
+service_is_loaded() {
+ if [ "$service_backend" = systemd ]; then
+  [ "$(systemctl show --property=LoadState --value "$service")" = loaded ]
+ else
+  [ -f "$service_path" ] && [ ! -L "$service_path" ]
+ fi
+}
+service_exec_matches() {
+ if [ "$service_backend" = systemd ]; then
+  case "$(systemctl show --property=ExecStart --value "$service")" in *"path=$binary "*) return 0;; esac
+  return 1
+ fi
+ grep -F -q "command=\"$binary\"" "$service_path" || grep -F -q "command=$binary" "$service_path"
 }
 recover() {
  code=$?
  trap - EXIT HUP INT TERM
  set +e
  if [ "$completed" != 1 ] && [ "$replaced" = 1 ]; then
-  systemctl stop "$service" >/dev/null 2>&1
-  if systemctl is-active --quiet "$service"; then
+  service_stop
+  if service_is_active; then
    printf '%s\n' 'CRITICAL: service did not stop; executable rollback refused. Inspect private backup.' >&2
   elif ! atomic_binary "$backup/x-ui"; then
    printf '%s\n' 'CRITICAL: executable rollback failed. Service left stopped; recover from private backup.' >&2
@@ -94,10 +139,10 @@ recover() {
    cp -a -- "$state_dir" "$backup/state-after-failed-start" || printf '%s\n' 'Could not copy failed-start state; original data remains in place.' >&2
    if "$binary" -config "$config" -check >/dev/null 2>&1; then
     if [ "$was_active" = 1 ]; then
-     if systemctl start "$service" && wait_healthy; then
+     if service_start && wait_healthy; then
       printf '%s\n' 'Previous executable restored and healthy; current user and traffic data retained.' >&2
      else
-      systemctl stop "$service" >/dev/null 2>&1
+      service_stop
       printf '%s\n' 'Previous executable restored, but health check failed. Service left stopped.' >&2
      fi
     fi
@@ -107,8 +152,8 @@ recover() {
   fi
   code=1
  elif [ "$completed" != 1 ] && [ "$stopped" = 1 ] && [ "$was_active" = 1 ]; then
-  if ! systemctl start "$service" || ! wait_healthy; then
-   systemctl stop "$service" >/dev/null 2>&1
+  if ! service_start || ! wait_healthy; then
+   service_stop
    printf '%s\n' 'Original executable unchanged, but restart health check failed. Service left stopped.' >&2
   fi
   code=1
@@ -142,17 +187,15 @@ state_dir=$(realpath -e -- "$state_dir")
 case "$backup_root/" in "$state_dir/"*) fail 'Backup root must be outside the state directory';; esac
 case "$binary" in "$state_dir/"*) fail 'Executable must be outside the state directory';; esac
 "$stage/x-ui" -config "$config" -check >/dev/null || fail 'New executable cannot read existing configuration/state'
-load_state=$(systemctl show --property=LoadState --value "$service")
-[ "$load_state" = loaded ] || fail 'Configured systemd service is not loaded'
-unit_exec=$(systemctl show --property=ExecStart --value "$service")
-case "$unit_exec" in *"path=$binary "*) ;; *) fail 'Loaded service does not execute the selected x-ui binary';; esac
-if systemctl is-active --quiet "$service"; then was_active=1; fi
+service_is_loaded || fail 'Configured service is not loaded'
+service_exec_matches || fail 'Loaded service does not execute the selected x-ui binary'
+if service_is_active; then was_active=1; fi
 if [ "$was_active" = 1 ]; then
  # Set before stopping so an interrupted stop still attempts safe recovery.
  stopped=1
- systemctl stop "$service"
+ service_stop
 fi
-if systemctl is-active --quiet "$service"; then fail 'Service is still active; refusing backup and replacement'; fi
+if service_is_active; then fail 'Service is still active; refusing backup and replacement'; fi
 backup=$(mktemp -d "$backup_root/$version-$(date -u +%Y%m%dT%H%M%SZ).XXXXXX")
 cp -p -- "$binary" "$backup/x-ui"
 cp -p -- "$config" "$backup/config.json"
@@ -163,7 +206,7 @@ printf 'version=%s\nservice=%s\nconfig=%s\nstate_dir=%s\nbinary=%s\n' "$version"
 replaced=1
 atomic_binary "$stage/x-ui"
 if [ "$was_active" = 1 ]; then
- systemctl start "$service"
+ service_start
  wait_healthy || fail 'New node failed authenticated API/Xray health check'
 else
  printf '%s\n' 'Service was stopped before the update and remains stopped.'

@@ -18,7 +18,7 @@
 
 ## 安装
 
-支持 systemd Linux：amd64、arm64、386、armv7；运行验证以 Linux amd64 为准，其他架构仅交叉编译。需要 root、`curl`、`tar`、`sha256sum`、`systemctl`、`install`、`flock`；下载官方 Xray 时还需要 `unzip`。
+支持 systemd 或 OpenRC Linux：amd64、arm64、386、armv7；运行验证以 Linux amd64 为准，其他架构仅交叉编译。需要 root、`curl`、`tar`、`sha256sum`、`install`、`flock`；systemd 需要 `systemctl`，Alpine/OpenRC 需要 `rc-service` 和 `rc-update`；下载官方 Xray 时还需要 `unzip`。
 
 ```bash
 curl -fL --retry 3 https://github.com/AngeloSakura/angelo-nat-node/releases/download/v0.1.1/install.sh -o /tmp/angelo-node-install.sh
@@ -85,6 +85,9 @@ sudo /usr/local/bin/x-ui -health-check
 ```bash
 sudo systemctl status angelo-node
 sudo journalctl -u angelo-node -n 50 --no-pager
+# Alpine/OpenRC：
+sudo rc-service angelo-node status
+sudo tail -n 50 /var/log/angelo-node.log /var/log/angelo-node.err
 sudo /usr/local/bin/x-ui -check         # 严格只读，缺失状态会报错，不新建用户库
 sudo /usr/local/bin/x-ui -health-check  # 验证当前 Xray stats 响应和节点 API
 ```

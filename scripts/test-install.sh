@@ -118,7 +118,7 @@ replacements = {
  'library_dir=/usr/local/lib/angelo-node': 'library_dir=' + shlex.quote(case + '/destination/usr/local/lib/angelo-node'),
  'binary=/usr/local/bin/x-ui': 'binary=' + shlex.quote(case + '/destination/usr/local/bin/x-ui'),
  'updater=/usr/local/bin/angelo-node-update': 'updater=' + shlex.quote(case + '/destination/usr/local/bin/angelo-node-update'),
- 'unit=/etc/systemd/system/angelo-node.service': 'unit=' + shlex.quote(case + '/destination/etc/systemd/system/angelo-node.service'),
+ 'service_path=/etc/systemd/system/angelo-node.service': 'service_path=' + shlex.quote(case + '/destination/etc/systemd/system/angelo-node.service'),
  'lock=/run/lock/angelo-node-install.lock': 'lock=' + shlex.quote(case + '/destination/run/lock/angelo-node-install.lock'),
  'for candidate in /usr/local/x-ui/bin/xray-linux-$arch /usr/local/bin/xray; do': 'for candidate in "$TEST_CASE/existing-xui/bin/xray-linux-$arch" "$TEST_CASE/existing-global/xray"; do',
  'startup_timeout=30': 'startup_timeout=1',

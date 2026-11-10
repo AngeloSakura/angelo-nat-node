@@ -7,19 +7,32 @@ version=${1:-v0.1.1}
 [ "$#" -le 1 ] || fail 'Usage: install.sh vX.Y.Z'
 case "$version" in v[0-9]*.[0-9]*.[0-9]*) ;; *) fail 'Usage: install.sh vX.Y.Z';; esac
 case "$version" in *[!a-zA-Z0-9._-]*) fail 'Invalid release tag';; esac
-[ "$(uname -s)" = Linux ] || fail 'Linux/systemd required'
+[ "$(uname -s)" = Linux ] || fail 'Linux required'
 [ "$(id -u)" = 0 ] || fail 'Run as root'
-for tool in curl tar sha256sum systemctl install flock mktemp awk date; do
+for tool in curl tar sha256sum install flock mktemp awk date; do
  command -v "$tool" >/dev/null 2>&1 || fail "Missing: $tool"
 done
+if command -v systemctl >/dev/null 2>&1; then
+ service_backend=systemd
+ service=angelo-node.service
+ service_path=/etc/systemd/system/angelo-node.service
+ service_member=angelo-node.service
+ command -v systemctl >/dev/null 2>&1 || fail 'Missing: systemctl'
+elif command -v rc-service >/dev/null 2>&1 && command -v rc-update >/dev/null 2>&1; then
+ service_backend=openrc
+ service=angelo-node
+ service_path=/etc/init.d/angelo-node
+ service_member=angelo-node.openrc
+else
+ fail 'Missing: systemctl or OpenRC (rc-service and rc-update)'
+fi
 config_dir=/etc/angelo-node
 state_dir=/var/lib/angelo-node
 library_dir=/usr/local/lib/angelo-node
 binary=/usr/local/bin/x-ui
 updater=/usr/local/bin/angelo-node-update
-unit=/etc/systemd/system/angelo-node.service
+unit=$service_path
 lock=/run/lock/angelo-node-install.lock
-service=angelo-node.service
 startup_timeout=30
 exec 9>"$lock"
 flock -n 9 || fail 'Another node installation is running'
@@ -37,8 +50,14 @@ cleanup() {
  trap - EXIT HUP INT TERM
  set +e
  if [ "$completed" != 1 ] && [ "$service_attempted" = 1 ]; then
-  systemctl disable --now "$service" >/dev/null 2>&1
-  printf '%s\n' 'Node startup failed. New configuration/state remain in place; inspect journalctl -u angelo-node. Existing x-ui and Xray were not changed.' >&2
+  if [ "$service_backend" = systemd ]; then
+   systemctl disable --now "$service" >/dev/null 2>&1
+   printf '%s\n' 'Node startup failed. New configuration/state remain in place; inspect journalctl -u angelo-node. Existing x-ui and Xray were not changed.' >&2
+  else
+   rc-service "$service" stop >/dev/null 2>&1
+   rc-update del "$service" default >/dev/null 2>&1
+   printf '%s\n' 'Node startup failed. New configuration/state remain in place; inspect /var/log/angelo-node*. Existing x-ui and Xray were not changed.' >&2
+  fi
  fi
  case "$stage" in "${TMPDIR:-/var/tmp}/angelo-install."*) rm -rf -- "$stage";; esac
  exit "$code"
@@ -53,7 +72,7 @@ curl -fL --retry 3 --connect-timeout 15 --max-filesize 1048576 "$base/SHA256SUMS
 (cd "$stage"; awk -v name="$asset" '$2==name || $2=="*"name {if(length($1)!=64 || $1~/[^0-9a-fA-F]/ || NF!=2) exit 1; print $1 "  " name; count++} END {if(count!=1) exit 1}' SHA256SUMS > selected; sha256sum -c selected)
 # Stream only expected members; never unpack arbitrary paths or links.
 tar -tzf "$stage/$asset" >"$stage/members"
-for member in x-ui update-node.sh angelo-node.service; do
+for member in x-ui update-node.sh "$service_member"; do
  awk -v name="$member" '$0==name {count++} END {if(count!=1) exit 1}' "$stage/members" || fail "Archive must contain exactly one $member"
  tar -xOzf "$stage/$asset" "$member" >"$stage/$member"
  [ -s "$stage/$member" ] || fail "Release member is empty or not a regular file: $member"
@@ -94,13 +113,24 @@ install -m 755 "$stage/x-ui" "$binary"
 install -m 755 "$stage/update-node.sh" "$updater"
 install -m 755 "$stage/xray" "$library_dir/xray"
 "$binary" -config "$config_dir/config.json" -init -listen "${ANGELO_LISTEN:-:2053}" -state-dir "$state_dir" -xray "$library_dir/xray"
-install -m 644 "$stage/angelo-node.service" "$unit"
-systemctl daemon-reload
+if [ "$service_backend" = systemd ]; then
+ install -m 644 "$stage/$service_member" "$unit"
+ systemctl daemon-reload
+else
+ install -m 755 "$stage/$service_member" "$unit"
+fi
 service_attempted=1
-systemctl enable --now "$service"
+if [ "$service_backend" = systemd ]; then
+ systemctl enable --now "$service"
+else
+ rc-update add "$service" default
+ rc-service "$service" start
+fi
 deadline=$(( $(date +%s) + startup_timeout ))
 while :; do
- if systemctl is-active --quiet "$service" && "$binary" -config "$config_dir/config.json" -health-check >/dev/null 2>&1; then break; fi
+ if { [ "$service_backend" = systemd ] && systemctl is-active --quiet "$service"; } || { [ "$service_backend" = openrc ] && rc-service "$service" status >/dev/null 2>&1; }; then
+  if "$binary" -config "$config_dir/config.json" -health-check >/dev/null 2>&1; then break; fi
+ fi
  [ "$(date +%s)" -lt "$deadline" ] || fail 'Authenticated API/Xray health check failed'
  sleep 1
 done

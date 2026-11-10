@@ -1,0 +1,20 @@
+#!/sbin/openrc-run
+
+name="Angelo lightweight NAT node"
+description="Angelo lightweight NAT node"
+
+command="/usr/local/bin/x-ui"
+command_args="-config /etc/angelo-node/config.json"
+command_background=true
+pidfile="/run/${RC_SVCNAME}.pid"
+output_log="/var/log/angelo-node.log"
+error_log="/var/log/angelo-node.err"
+
+export GOMEMLIMIT="12MiB"
+export GOGC="50"
+export GOMAXPROCS="1"
+
+depend() {
+    need net
+    after firewall
+}
